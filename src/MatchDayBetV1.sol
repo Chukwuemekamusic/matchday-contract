@@ -1,17 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.29;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/utils/Pausable.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 
 /**
- * @title MatchDayBet
+ * @title MatchDayBet V1
  * @notice Parimutuel betting contract for football matches using native ETH on Base
- * @dev Built for Towns Protocol bot integration
+ * @dev UUPS upgradeable, built for Towns Protocol bot integration
  * @author Towns Football Betting Bot
  */
-contract MatchDayBet is Ownable, ReentrancyGuard, Pausable {
+contract MatchDayBetV1 is Initializable, UUPSUpgradeable, ReentrancyGuard, PausableUpgradeable {
     // ============ Enums ============
 
     enum Outcome {
@@ -20,6 +21,7 @@ contract MatchDayBet is Ownable, ReentrancyGuard, Pausable {
         DRAW,
         AWAY
     }
+
     enum MatchStatus {
         OPEN,
         CLOSED,
@@ -54,32 +56,43 @@ contract MatchDayBet is Ownable, ReentrancyGuard, Pausable {
         bool claimed;
     }
 
-    // New struct to help with stack-too-deep in complex calculations
     struct OddsCalculation {
-        uint256 effectivePool;
         uint256 platformFee;
+        uint256 effectivePool;
         uint256 homeOdds;
         uint256 drawOdds;
         uint256 awayOdds;
     }
 
-    // ============ State Variables ============
+    // ============ Constants ============
 
     uint256 public constant GRACE_PERIOD = 1 hours;
     uint256 private constant BASIS_POINTS = 10000;
     uint256 private constant MAX_FEE_BPS = 500; // 5%
 
+    // ============ State Variables ============
+    // IMPORTANT: Never reorder or remove these in future versions!
+
+    /// @notice Contract owner (full control)
+    address public owner;
+
+    /// @notice Addresses that can manage matches (bot)
+    mapping(address => bool) public matchManagers;
+
+    /// @notice Whether upgrades are permanently locked
+    bool public upgradesLocked;
+
     /// @notice Platform fee in basis points (100 = 1%)
-    uint256 public platformFeeBps = 100;
+    uint256 public platformFeeBps;
 
     /// @notice Minimum bet amount in wei
-    uint256 public minStake = 0.001 ether;
+    uint256 public minStake;
 
     /// @notice Maximum bet amount in wei
-    uint256 public maxStake = 0.1 ether;
+    uint256 public maxStake;
 
     /// @notice Counter for match IDs
-    uint256 public nextMatchId = 1;
+    uint256 public nextMatchId;
 
     /// @notice Accumulated platform fees available for withdrawal
     uint256 public accumulatedFees;
@@ -92,6 +105,9 @@ contract MatchDayBet is Ownable, ReentrancyGuard, Pausable {
 
     /// @notice Match ID => User address => Has user bet on this match
     mapping(uint256 => mapping(address => bool)) public hasBet;
+
+    /// @dev Reserved storage gap for future upgrades
+    uint256[40] private __gap;
 
     // ============ Events ============
 
@@ -121,8 +137,21 @@ contract MatchDayBet is Ownable, ReentrancyGuard, Pausable {
 
     event PlatformFeeUpdated(uint256 newFeeBps);
 
+    event MatchManagerAdded(address indexed manager);
+
+    event MatchManagerRemoved(address indexed manager);
+
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+
+    event UpgradesLocked();
+
+    event EmergencyPausedByManager(address indexed manager);
+
     // ============ Errors ============
 
+    error NotOwner();
+    error NotMatchManager();
+    error UpgradesAreLocked();
     error MatchNotFound();
     error MatchNotOpen();
     error MatchNotResolved();
@@ -143,19 +172,114 @@ contract MatchDayBet is Ownable, ReentrancyGuard, Pausable {
     error NoFeesToWithdraw();
     error InvalidStakeLimits();
     error InvalidFeeBps();
+    error ZeroAddress();
 
-    // ======== Modifiers ============
-    
+    // ============ Modifiers ============
+
+    modifier onlyOwner() {
+        if (msg.sender != owner) revert NotOwner();
+        _;
+    }
+
+    modifier onlyMatchManager() {
+        if (!matchManagers[msg.sender] && msg.sender != owner) revert NotMatchManager();
+        _;
+    }
+
     modifier matchExists(uint256 matchId) {
         if (matches[matchId].matchId == 0) revert MatchNotFound();
         _;
     }
 
-    // ============ Constructor ============
+    // ============ Constructor & Initializer ============
 
-    constructor() Ownable(msg.sender) {}
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
 
-    // ============ External Functions ============
+    /**
+     * @notice Initialize the contract (replaces constructor for upgradeable)
+     * @param _owner The owner address (your wallet)
+     */
+    function initialize(address _owner) public initializer {
+        if (_owner == address(0)) revert ZeroAddress();
+
+        __Pausable_init();
+
+        owner = _owner;
+        matchManagers[_owner] = true;
+        upgradesLocked = false;
+
+        platformFeeBps = 100; // 1%
+        minStake = 0.001 ether;
+        maxStake = 0.1 ether;
+        nextMatchId = 1;
+    }
+
+    // ============ UUPS Upgrade Authorization ============
+
+    /**
+     * @dev Required override for UUPS - controls who can upgrade
+     */
+    function _authorizeUpgrade(
+        address /* newImplementation */
+    )
+        internal
+        override
+        onlyOwner
+    {
+        if (upgradesLocked) revert UpgradesAreLocked();
+    }
+
+    /**
+     * @notice Permanently lock the contract from future upgrades
+     * @dev This is irreversible!
+     */
+    function lockUpgrades() external onlyOwner {
+        upgradesLocked = true;
+        emit UpgradesLocked();
+    }
+
+    // ============ Owner Management ============
+
+    /**
+     * @notice Transfer ownership to a new address
+     * @param newOwner The new owner address
+     */
+    function transferOwnership(address newOwner) external onlyOwner {
+        if (newOwner == address(0)) revert ZeroAddress();
+
+        address previousOwner = owner;
+        owner = newOwner;
+
+        // New owner automatically becomes a match manager
+        matchManagers[newOwner] = true;
+
+        emit OwnershipTransferred(previousOwner, newOwner);
+    }
+
+    /**
+     * @notice Add a match manager (bot)
+     * @param manager The address to add as match manager
+     */
+    function addMatchManager(address manager) external onlyOwner {
+        if (manager == address(0)) revert ZeroAddress();
+
+        matchManagers[manager] = true;
+        emit MatchManagerAdded(manager);
+    }
+
+    /**
+     * @notice Remove a match manager
+     * @param manager The address to remove
+     */
+    function removeMatchManager(address manager) external onlyOwner {
+        matchManagers[manager] = false;
+        emit MatchManagerRemoved(manager);
+    }
+
+    // ============ Match Manager Functions ============
 
     /**
      * @notice Create a new match for betting
@@ -170,7 +294,7 @@ contract MatchDayBet is Ownable, ReentrancyGuard, Pausable {
         string calldata awayTeam,
         string calldata competition,
         uint256 kickoffTime
-    ) external onlyOwner returns (uint256 matchId) {
+    ) external onlyMatchManager whenNotPaused returns (uint256 matchId) {
         if (kickoffTime <= block.timestamp) revert KickoffTimePassed();
 
         matchId = nextMatchId++;
@@ -197,6 +321,72 @@ contract MatchDayBet is Ownable, ReentrancyGuard, Pausable {
     }
 
     /**
+     * @notice Close betting for a match (usually called at kickoff)
+     * @param matchId The ID of the match
+     */
+    function closeBetting(uint256 matchId) external onlyMatchManager matchExists(matchId) {
+        Match storage matchData = matches[matchId];
+
+        if (matchData.status != MatchStatus.OPEN) revert MatchNotOpen();
+
+        matchData.status = MatchStatus.CLOSED;
+
+        emit BettingClosed(matchId);
+    }
+
+    /**
+     * @notice Resolve a match with the final result
+     * @param matchId The ID of the match
+     * @param result The match outcome (HOME, DRAW, or AWAY)
+     */
+    function resolveMatch(uint256 matchId, Outcome result) external onlyMatchManager matchExists(matchId) {
+        Match storage matchData = matches[matchId];
+
+        _validateResolution(matchData, result);
+
+        // Auto-close if still open
+        if (matchData.status == MatchStatus.OPEN) {
+            matchData.status = MatchStatus.CLOSED;
+        }
+
+        matchData.result = result;
+        matchData.status = MatchStatus.RESOLVED;
+
+        // Calculate and store platform fee
+        uint256 winnerPool = _getOutcomePool(matchData, result);
+        uint256 platformFee = _calculateAndStoreFee(matchData, winnerPool);
+
+        emit MatchResolved(matchId, result, matchData.totalPool, winnerPool, platformFee);
+    }
+
+    /**
+     * @notice Cancel a match and enable refunds
+     * @param matchId The ID of the match
+     * @param reason The reason for cancellation
+     */
+    function cancelMatch(uint256 matchId, string calldata reason) external onlyMatchManager matchExists(matchId) {
+        Match storage matchData = matches[matchId];
+
+        if (matchData.status == MatchStatus.RESOLVED) revert MatchAlreadyResolved();
+        if (matchData.status == MatchStatus.CANCELLED) revert MatchAlreadyCancelled();
+
+        matchData.status = MatchStatus.CANCELLED;
+
+        emit MatchCancelled(matchId, reason);
+    }
+
+    /**
+     * @notice Emergency pause - bot can pause but only owner can unpause
+     * @dev Allows bot to stop the bleeding if something goes wrong
+     */
+    function emergencyPause() external onlyMatchManager {
+        _pause();
+        emit EmergencyPausedByManager(msg.sender);
+    }
+
+    // ============ User Functions ============
+
+    /**
      * @notice Place a bet on a match outcome
      * @param matchId The ID of the match to bet on
      * @param prediction The predicted outcome (HOME, DRAW, or AWAY)
@@ -213,76 +403,25 @@ contract MatchDayBet is Ownable, ReentrancyGuard, Pausable {
     }
 
     /**
-     * @notice Close betting for a match (usually called at kickoff)
-     * @param matchId The ID of the match
-     */
-    function closeBetting(uint256 matchId) external onlyOwner matchExists(matchId) {
-        Match storage matchData = matches[matchId];
-
-        if (matchData.status != MatchStatus.OPEN) revert MatchNotOpen();
-
-        matchData.status = MatchStatus.CLOSED;
-
-        emit BettingClosed(matchId);
-    }
-
-    /**
-     * @notice Resolve a match with the final result
-     * @param matchId The ID of the match
-     * @param result The match outcome (HOME, DRAW, or AWAY)
-     */
-    function resolveMatch(uint256 matchId, Outcome result) external onlyOwner matchExists(matchId) {
-        Match storage matchData = matches[matchId];
-
-        _validateResolution(matchData, result);
-        
-        // Auto-close if still open
-        if (matchData.status == MatchStatus.OPEN) {
-            matchData.status = MatchStatus.CLOSED;
-        }
-
-        matchData.result = result;
-        matchData.status = MatchStatus.RESOLVED;
-
-        // Calculate and store platform fee
-        uint256 platformFee = _calculateAndStoreFee(matchData, result);
-
-        emit MatchResolved(matchId, result, matchData.totalPool, _getOutcomePool(matchData, result), platformFee);
-    }
-
-    /**
-     * @notice Cancel a match and enable refunds
-     * @param matchId The ID of the match
-     * @param reason The reason for cancellation
-     */
-    function cancelMatch(uint256 matchId, string calldata reason) external onlyOwner matchExists(matchId) {
-        Match storage matchData = matches[matchId];
-
-        if (matchData.status == MatchStatus.RESOLVED) revert MatchAlreadyResolved();
-        if (matchData.status == MatchStatus.CANCELLED) revert MatchAlreadyCancelled();
-
-        matchData.status = MatchStatus.CANCELLED;
-
-        emit MatchCancelled(matchId, reason);
-    }
-
-    /**
      * @notice Claim winnings for a resolved match
      * @param matchId The ID of the match
      */
     function claimWinnings(uint256 matchId) external nonReentrant matchExists(matchId) {
         Match storage matchData = matches[matchId];
-        
+
         _validateClaim(matchData, matchId);
-        
+
         Bet storage userBet = userBets[matchId][msg.sender];
+
         uint256 payout = _calculatePayout(matchData, userBet);
-        
+
         userBet.claimed = true;
-        
+
         _transferPayout(payout);
-        
-        emit WinningsClaimed(matchId, msg.sender, payout, payout > userBet.amount ? payout - userBet.amount : 0);
+
+        uint256 profit = payout > userBet.amount ? payout - userBet.amount : 0;
+
+        emit WinningsClaimed(matchId, msg.sender, payout, profit);
     }
 
     /**
@@ -306,11 +445,21 @@ contract MatchDayBet is Ownable, ReentrancyGuard, Pausable {
         emit RefundClaimed(matchId, msg.sender, refundAmount);
     }
 
+    // ============ Owner-Only Admin Functions ============
+
+    /**
+     * @notice Unpause the contract (only owner, not match managers)
+     */
+    function unpause() external onlyOwner {
+        _unpause();
+    }
+
     /**
      * @notice Withdraw accumulated platform fees
      * @param to Address to send fees to
      */
     function withdrawFees(address to) external onlyOwner {
+        if (to == address(0)) revert ZeroAddress();
         if (accumulatedFees == 0) revert NoFeesToWithdraw();
 
         uint256 amount = accumulatedFees;
@@ -320,8 +469,6 @@ contract MatchDayBet is Ownable, ReentrancyGuard, Pausable {
 
         emit FeesWithdrawn(to, amount);
     }
-
-    // ============ Admin Functions ============
 
     /**
      * @notice Update minimum and maximum stake amounts
@@ -349,20 +496,6 @@ contract MatchDayBet is Ownable, ReentrancyGuard, Pausable {
         emit PlatformFeeUpdated(newFeeBps);
     }
 
-    /**
-     * @notice Pause the contract (emergency)
-     */
-    function pause() external onlyOwner {
-        _pause();
-    }
-
-    /**
-     * @notice Unpause the contract
-     */
-    function unpause() external onlyOwner {
-        _unpause();
-    }
-
     // ============ View Functions ============
 
     /**
@@ -379,11 +512,7 @@ contract MatchDayBet is Ownable, ReentrancyGuard, Pausable {
      * @param matchId The ID of the match
      * @return homeOdds Draw odds Away odds (in basis points)
      */
-    function getOdds(uint256 matchId) 
-        external 
-        view 
-        returns (uint256 homeOdds, uint256 drawOdds, uint256 awayOdds) 
-    {
+    function getOdds(uint256 matchId) external view returns (uint256 homeOdds, uint256 drawOdds, uint256 awayOdds) {
         Match storage matchData = matches[matchId];
 
         if (matchData.totalPool == 0) {
@@ -399,11 +528,7 @@ contract MatchDayBet is Ownable, ReentrancyGuard, Pausable {
      * @param matchId The ID of the match
      * @return total Home pool Draw pool Away pool
      */
-    function getPools(uint256 matchId) 
-        external 
-        view 
-        returns (uint256 total, uint256 home, uint256 draw, uint256 away) 
-    {
+    function getPools(uint256 matchId) external view returns (uint256 total, uint256 home, uint256 draw, uint256 away) {
         Match storage matchData = matches[matchId];
         return (matchData.totalPool, matchData.homePool, matchData.drawPool, matchData.awayPool);
     }
@@ -426,6 +551,15 @@ contract MatchDayBet is Ownable, ReentrancyGuard, Pausable {
      */
     function hasUserBet(uint256 matchId, address user) external view returns (bool) {
         return hasBet[matchId][user];
+    }
+
+    /**
+     * @notice Check if an address is a match manager
+     * @param manager The address to check
+     * @return bool True if address is a match manager
+     */
+    function isMatchManager(address manager) external view returns (bool) {
+        return matchManagers[manager];
     }
 
     /**
@@ -465,6 +599,14 @@ contract MatchDayBet is Ownable, ReentrancyGuard, Pausable {
         potentialPayout = (amount * effectivePool) / newOutcomePool;
     }
 
+    /**
+     * @notice Get contract version
+     * @return Version string
+     */
+    function version() external pure returns (string memory) {
+        return "1.0.0";
+    }
+
     // ============ Internal Functions ============
 
     /**
@@ -489,7 +631,7 @@ contract MatchDayBet is Ownable, ReentrancyGuard, Pausable {
 
         // Update pools and bet counts
         matchData.totalPool += amount;
-        
+
         if (prediction == Outcome.HOME) {
             matchData.homePool += amount;
             matchData.homeBetCount++;
@@ -502,13 +644,9 @@ contract MatchDayBet is Ownable, ReentrancyGuard, Pausable {
         }
 
         // Store bet
-        userBets[matchId][msg.sender] = Bet({
-            bettor: msg.sender,
-            amount: amount,
-            prediction: prediction,
-            claimed: false
-        });
-        
+        userBets[matchId][msg.sender] =
+            Bet({bettor: msg.sender, amount: amount, prediction: prediction, claimed: false});
+
         hasBet[matchId][msg.sender] = true;
 
         emit BetPlaced(matchId, msg.sender, prediction, amount, matchData.totalPool);
@@ -527,16 +665,14 @@ contract MatchDayBet is Ownable, ReentrancyGuard, Pausable {
     /**
      * @dev Calculate and store platform fee for resolved match
      */
-    function _calculateAndStoreFee(Match storage matchData, Outcome result) internal returns (uint256 platformFee) {
-        uint256 winnerPool = _getOutcomePool(matchData, result);
-        
+    function _calculateAndStoreFee(Match storage matchData, uint256 winnerPool) internal returns (uint256 platformFee) {
         // Only take fee if there are winners AND losers
         if (winnerPool > 0 && winnerPool < matchData.totalPool) {
             platformFee = _getPlatformFee(matchData.totalPool);
             matchData.platformFeeAmount = platformFee;
             accumulatedFees += platformFee;
         }
-        
+
         return platformFee;
     }
 
@@ -575,7 +711,7 @@ contract MatchDayBet is Ownable, ReentrancyGuard, Pausable {
         calc.platformFee = matchData.status == MatchStatus.RESOLVED
             ? matchData.platformFeeAmount
             : _getPlatformFee(matchData.totalPool);
-        
+
         calc.effectivePool = matchData.totalPool - calc.platformFee;
 
         calc.homeOdds = matchData.homePool > 0 ? (calc.effectivePool * BASIS_POINTS) / matchData.homePool : 0;
