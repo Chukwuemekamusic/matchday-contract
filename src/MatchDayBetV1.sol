@@ -125,6 +125,8 @@ contract MatchDayBetV1 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
         uint256 indexed matchId, Outcome result, uint256 totalPool, uint256 winnerPool, uint256 platformFee
     );
 
+    event BatchMatchesResolved(uint256[] matchIds, Outcome[] results);
+
     event MatchCancelled(uint256 indexed matchId, string reason);
 
     event WinningsClaimed(uint256 indexed matchId, address indexed bettor, uint256 amount, uint256 profit);
@@ -173,6 +175,7 @@ contract MatchDayBetV1 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
     error InvalidStakeLimits();
     error InvalidFeeBps();
     error ZeroAddress();
+    error ArrayLengthMismatch();
 
     // ============ Modifiers ============
 
@@ -187,8 +190,12 @@ contract MatchDayBetV1 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
     }
 
     modifier matchExists(uint256 matchId) {
-        if (matches[matchId].matchId == 0) revert MatchNotFound();
+        _matchExists(matchId);
         _;
+    }
+
+    function _matchExists(uint256 matchId) internal view {
+        if (matches[matchId].matchId == 0) revert MatchNotFound();
     }
 
     // ============ Constructor & Initializer ============
@@ -340,23 +347,29 @@ contract MatchDayBetV1 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
      * @param result The match outcome (HOME, DRAW, or AWAY)
      */
     function resolveMatch(uint256 matchId, Outcome result) external onlyMatchManager matchExists(matchId) {
-        Match storage matchData = matches[matchId];
+        _resolveMatch(matchId, result);
+    }
 
-        _validateResolution(matchData, result);
+    /**
+     * @notice Batch resolve matches
+     * @param matchIds Array of match IDs
+     * @param results Array of match outcomes
+     */
+    function batchResolveMatches(uint256[] calldata matchIds, Outcome[] calldata results) external onlyMatchManager {
+        if (matchIds.length != results.length) revert ArrayLengthMismatch();
 
-        // Auto-close if still open
-        if (matchData.status == MatchStatus.OPEN) {
-            matchData.status = MatchStatus.CLOSED;
+        for (uint256 i = 0; i < matchIds.length; i++) {
+            uint256 matchId = matchIds[i];
+            Outcome result = results[i];
+
+            // Validate match exists
+            _matchExists(matchId);
+
+            // Resolve match
+            _resolveMatch(matchId, result);
         }
 
-        matchData.result = result;
-        matchData.status = MatchStatus.RESOLVED;
-
-        // Calculate and store platform fee
-        uint256 winnerPool = _getOutcomePool(matchData, result);
-        uint256 platformFee = _calculateAndStoreFee(matchData, winnerPool);
-
-        emit MatchResolved(matchId, result, matchData.totalPool, winnerPool, platformFee);
+        emit BatchMatchesResolved(matchIds, results);
     }
 
     /**
@@ -608,6 +621,26 @@ contract MatchDayBetV1 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
     }
 
     // ============ Internal Functions ============
+
+    function _resolveMatch(uint256 matchId, Outcome result) internal {
+        Match storage matchData = matches[matchId];
+
+        _validateResolution(matchData, result);
+
+        // Auto-close if still open
+        if (matchData.status == MatchStatus.OPEN) {
+            matchData.status = MatchStatus.CLOSED;
+        }
+
+        matchData.result = result;
+        matchData.status = MatchStatus.RESOLVED;
+
+        // Calculate and store platform fee
+        uint256 winnerPool = _getOutcomePool(matchData, result);
+        uint256 platformFee = _calculateAndStoreFee(matchData, winnerPool);
+
+        emit MatchResolved(matchId, result, matchData.totalPool, winnerPool, platformFee);
+    }
 
     /**
      * @dev Validate bet parameters

@@ -108,6 +108,8 @@ contract MatchDayBet is Ownable, ReentrancyGuard, Pausable {
         uint256 indexed matchId, Outcome result, uint256 totalPool, uint256 winnerPool, uint256 platformFee
     );
 
+    event BatchMatchesResolved(uint256[] matchIds, Outcome[] results);
+
     event MatchCancelled(uint256 indexed matchId, string reason);
 
     event WinningsClaimed(uint256 indexed matchId, address indexed bettor, uint256 amount, uint256 profit);
@@ -142,6 +144,7 @@ contract MatchDayBet is Ownable, ReentrancyGuard, Pausable {
     error NoFeesToWithdraw();
     error InvalidStakeLimits();
     error InvalidFeeBps();
+    error ArrayLengthMismatch();
 
     // ======== Modifiers ============
     modifier matchExists(uint256 matchId) {
@@ -251,6 +254,47 @@ contract MatchDayBet is Ownable, ReentrancyGuard, Pausable {
         uint256 platformFee = _calculateAndStoreFee(matchData, winnerPool);
 
         emit MatchResolved(matchId, result, matchData.totalPool, _getOutcomePool(matchData, result), platformFee);
+    }
+
+    /**
+     * @notice Resolve multiple matches in a single transaction (gas-efficient batch operation)
+     * @param matchIds Array of match IDs to resolve
+     * @param results Array of outcomes corresponding to each match ID
+     * @dev Arrays must be of equal length. Each match is resolved individually with events.
+     */
+    function batchResolveMatches(uint256[] calldata matchIds, Outcome[] calldata results) external onlyOwner {
+        if (matchIds.length != results.length) revert ArrayLengthMismatch();
+
+        for (uint256 i = 0; i < matchIds.length; i++) {
+            uint256 matchId = matchIds[i];
+            Outcome result = results[i];
+
+            // Validate match exists
+            _matchExists(matchId);
+
+            Match storage matchData = matches[matchId];
+
+            // Validate resolution
+            _validateResolution(matchData, result);
+
+            // Auto-close if still open
+            if (matchData.status == MatchStatus.OPEN) {
+                matchData.status = MatchStatus.CLOSED;
+            }
+
+            matchData.result = result;
+            matchData.status = MatchStatus.RESOLVED;
+
+            // Calculate and store platform fee
+            uint256 winnerPool = _getOutcomePool(matchData, result);
+            uint256 platformFee = _calculateAndStoreFee(matchData, winnerPool);
+
+            // Emit individual match resolved event for each match
+            emit MatchResolved(matchId, result, matchData.totalPool, winnerPool, platformFee);
+        }
+
+        // Emit batch event for tracking
+        emit BatchMatchesResolved(matchIds, results);
     }
 
     /**

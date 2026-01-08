@@ -434,4 +434,261 @@ contract MatchDayBetTest is Test {
 
         assertEq(potential, 0.01485 ether);
     }
+
+    // ============ Batch Resolution Tests ============
+
+    function test_BatchResolveMatches() public {
+        // Create 3 matches
+        uint256 matchId1 = betting.createMatch("Arsenal", "Chelsea", "Premier League", KICKOFF_TIME);
+        uint256 matchId2 = betting.createMatch("Liverpool", "Man United", "Premier League", KICKOFF_TIME);
+        uint256 matchId3 = betting.createMatch("Man City", "Tottenham", "Premier League", KICKOFF_TIME);
+
+        // Place bets on all matches
+        vm.prank(alice);
+        betting.placeBet{value: 0.01 ether}(matchId1, MatchDayBet.Outcome.HOME);
+
+        vm.prank(bob);
+        betting.placeBet{value: 0.01 ether}(matchId2, MatchDayBet.Outcome.DRAW);
+
+        vm.prank(charlie);
+        betting.placeBet{value: 0.01 ether}(matchId3, MatchDayBet.Outcome.AWAY);
+
+        // Warp to after matches finished
+        vm.warp(KICKOFF_TIME + 2 hours);
+
+        // Prepare batch resolution
+        uint256[] memory matchIds = new uint256[](3);
+        matchIds[0] = matchId1;
+        matchIds[1] = matchId2;
+        matchIds[2] = matchId3;
+
+        MatchDayBet.Outcome[] memory results = new MatchDayBet.Outcome[](3);
+        results[0] = MatchDayBet.Outcome.HOME;
+        results[1] = MatchDayBet.Outcome.DRAW;
+        results[2] = MatchDayBet.Outcome.AWAY;
+
+        // Batch resolve
+        betting.batchResolveMatches(matchIds, results);
+
+        // Verify all matches resolved correctly
+        MatchDayBet.Match memory match1 = betting.getMatch(matchId1);
+        assertEq(uint256(match1.status), uint256(MatchDayBet.MatchStatus.RESOLVED));
+        assertEq(uint256(match1.result), uint256(MatchDayBet.Outcome.HOME));
+
+        MatchDayBet.Match memory match2 = betting.getMatch(matchId2);
+        assertEq(uint256(match2.status), uint256(MatchDayBet.MatchStatus.RESOLVED));
+        assertEq(uint256(match2.result), uint256(MatchDayBet.Outcome.DRAW));
+
+        MatchDayBet.Match memory match3 = betting.getMatch(matchId3);
+        assertEq(uint256(match3.status), uint256(MatchDayBet.MatchStatus.RESOLVED));
+        assertEq(uint256(match3.result), uint256(MatchDayBet.Outcome.AWAY));
+    }
+
+    function test_BatchResolveMatches_EmitsEvents() public {
+        // Create 2 matches
+        uint256 matchId1 = betting.createMatch("Arsenal", "Chelsea", "Premier League", KICKOFF_TIME);
+        uint256 matchId2 = betting.createMatch("Liverpool", "Man United", "Premier League", KICKOFF_TIME);
+
+        // Place bets
+        vm.prank(alice);
+        betting.placeBet{value: 0.01 ether}(matchId1, MatchDayBet.Outcome.HOME);
+
+        vm.prank(bob);
+        betting.placeBet{value: 0.01 ether}(matchId2, MatchDayBet.Outcome.AWAY);
+
+        vm.warp(KICKOFF_TIME + 2 hours);
+
+        uint256[] memory matchIds = new uint256[](2);
+        matchIds[0] = matchId1;
+        matchIds[1] = matchId2;
+
+        MatchDayBet.Outcome[] memory results = new MatchDayBet.Outcome[](2);
+        results[0] = MatchDayBet.Outcome.HOME;
+        results[1] = MatchDayBet.Outcome.AWAY;
+
+        // Expect individual MatchResolved events for each match
+        vm.expectEmit(true, false, false, true);
+        emit MatchDayBet.MatchResolved(matchId1, MatchDayBet.Outcome.HOME, 0.01 ether, 0.01 ether, 0);
+
+        vm.expectEmit(true, false, false, true);
+        emit MatchDayBet.MatchResolved(matchId2, MatchDayBet.Outcome.AWAY, 0.01 ether, 0.01 ether, 0);
+
+        // Expect batch event
+        vm.expectEmit(false, false, false, true);
+        emit MatchDayBet.BatchMatchesResolved(matchIds, results);
+
+        betting.batchResolveMatches(matchIds, results);
+    }
+
+    function test_BatchResolveMatches_AutoCloses() public {
+        // Create matches that are still OPEN
+        uint256 matchId1 = betting.createMatch("Arsenal", "Chelsea", "Premier League", KICKOFF_TIME);
+        uint256 matchId2 = betting.createMatch("Liverpool", "Man United", "Premier League", KICKOFF_TIME);
+
+        vm.prank(alice);
+        betting.placeBet{value: 0.01 ether}(matchId1, MatchDayBet.Outcome.HOME);
+
+        vm.prank(bob);
+        betting.placeBet{value: 0.01 ether}(matchId2, MatchDayBet.Outcome.AWAY);
+
+        // Verify matches are OPEN
+        assertEq(uint256(betting.getMatch(matchId1).status), uint256(MatchDayBet.MatchStatus.OPEN));
+        assertEq(uint256(betting.getMatch(matchId2).status), uint256(MatchDayBet.MatchStatus.OPEN));
+
+        vm.warp(KICKOFF_TIME + 2 hours);
+
+        uint256[] memory matchIds = new uint256[](2);
+        matchIds[0] = matchId1;
+        matchIds[1] = matchId2;
+
+        MatchDayBet.Outcome[] memory results = new MatchDayBet.Outcome[](2);
+        results[0] = MatchDayBet.Outcome.HOME;
+        results[1] = MatchDayBet.Outcome.AWAY;
+
+        // Batch resolve should auto-close
+        betting.batchResolveMatches(matchIds, results);
+
+        // Verify both resolved (not just closed)
+        assertEq(uint256(betting.getMatch(matchId1).status), uint256(MatchDayBet.MatchStatus.RESOLVED));
+        assertEq(uint256(betting.getMatch(matchId2).status), uint256(MatchDayBet.MatchStatus.RESOLVED));
+    }
+
+    function test_BatchResolveMatches_CalculatesFees() public {
+        // Create 2 matches
+        uint256 matchId1 = betting.createMatch("Arsenal", "Chelsea", "Premier League", KICKOFF_TIME);
+        uint256 matchId2 = betting.createMatch("Liverpool", "Man United", "Premier League", KICKOFF_TIME);
+
+        // Place bets with winners and losers on both
+        vm.prank(alice);
+        betting.placeBet{value: 0.01 ether}(matchId1, MatchDayBet.Outcome.HOME);
+
+        vm.prank(bob);
+        betting.placeBet{value: 0.01 ether}(matchId1, MatchDayBet.Outcome.AWAY);
+
+        vm.prank(alice);
+        betting.placeBet{value: 0.02 ether}(matchId2, MatchDayBet.Outcome.HOME);
+
+        vm.prank(charlie);
+        betting.placeBet{value: 0.02 ether}(matchId2, MatchDayBet.Outcome.DRAW);
+
+        vm.warp(KICKOFF_TIME + 2 hours);
+
+        uint256 feesBefore = betting.accumulatedFees();
+
+        uint256[] memory matchIds = new uint256[](2);
+        matchIds[0] = matchId1;
+        matchIds[1] = matchId2;
+
+        MatchDayBet.Outcome[] memory results = new MatchDayBet.Outcome[](2);
+        results[0] = MatchDayBet.Outcome.HOME;
+        results[1] = MatchDayBet.Outcome.HOME;
+
+        betting.batchResolveMatches(matchIds, results);
+
+        uint256 feesAfter = betting.accumulatedFees();
+
+        // Match 1: 0.02 ETH pool, fee = 0.0002 ETH
+        // Match 2: 0.04 ETH pool, fee = 0.0004 ETH
+        // Total fees: 0.0006 ETH
+        assertEq(feesAfter - feesBefore, 0.0006 ether);
+    }
+
+    function test_RevertBatchResolveMatches_ArrayLengthMismatch() public {
+        uint256 matchId1 = betting.createMatch("Arsenal", "Chelsea", "Premier League", KICKOFF_TIME);
+
+        uint256[] memory matchIds = new uint256[](2);
+        matchIds[0] = matchId1;
+        matchIds[1] = 999; // Invalid
+
+        MatchDayBet.Outcome[] memory results = new MatchDayBet.Outcome[](1);
+        results[0] = MatchDayBet.Outcome.HOME;
+
+        vm.expectRevert(MatchDayBet.ArrayLengthMismatch.selector);
+        betting.batchResolveMatches(matchIds, results);
+    }
+
+    function test_RevertBatchResolveMatches_MatchNotFound() public {
+        vm.warp(KICKOFF_TIME + 2 hours);
+
+        uint256[] memory matchIds = new uint256[](1);
+        matchIds[0] = 999; // Non-existent match
+
+        MatchDayBet.Outcome[] memory results = new MatchDayBet.Outcome[](1);
+        results[0] = MatchDayBet.Outcome.HOME;
+
+        vm.expectRevert(MatchDayBet.MatchNotFound.selector);
+        betting.batchResolveMatches(matchIds, results);
+    }
+
+    function test_RevertBatchResolveMatches_AlreadyResolved() public {
+        uint256 matchId1 = betting.createMatch("Arsenal", "Chelsea", "Premier League", KICKOFF_TIME);
+        uint256 matchId2 = betting.createMatch("Liverpool", "Man United", "Premier League", KICKOFF_TIME);
+
+        vm.prank(alice);
+        betting.placeBet{value: 0.01 ether}(matchId1, MatchDayBet.Outcome.HOME);
+
+        vm.warp(KICKOFF_TIME + 2 hours);
+
+        // Resolve matchId1 first
+        betting.resolveMatch(matchId1, MatchDayBet.Outcome.HOME);
+
+        // Try to batch resolve including already-resolved match
+        uint256[] memory matchIds = new uint256[](2);
+        matchIds[0] = matchId1; // Already resolved
+        matchIds[1] = matchId2;
+
+        MatchDayBet.Outcome[] memory results = new MatchDayBet.Outcome[](2);
+        results[0] = MatchDayBet.Outcome.HOME;
+        results[1] = MatchDayBet.Outcome.DRAW;
+
+        vm.expectRevert(MatchDayBet.MatchAlreadyResolved.selector);
+        betting.batchResolveMatches(matchIds, results);
+    }
+
+    function test_RevertBatchResolveMatches_NotOwner() public {
+        uint256 matchId = betting.createMatch("Arsenal", "Chelsea", "Premier League", KICKOFF_TIME);
+
+        vm.warp(KICKOFF_TIME + 2 hours);
+
+        uint256[] memory matchIds = new uint256[](1);
+        matchIds[0] = matchId;
+
+        MatchDayBet.Outcome[] memory results = new MatchDayBet.Outcome[](1);
+        results[0] = MatchDayBet.Outcome.HOME;
+
+        vm.prank(alice);
+        vm.expectRevert();
+        betting.batchResolveMatches(matchIds, results);
+    }
+
+    function test_RevertBatchResolveMatches_InvalidOutcome() public {
+        uint256 matchId = betting.createMatch("Arsenal", "Chelsea", "Premier League", KICKOFF_TIME);
+
+        vm.warp(KICKOFF_TIME + 2 hours);
+
+        uint256[] memory matchIds = new uint256[](1);
+        matchIds[0] = matchId;
+
+        MatchDayBet.Outcome[] memory results = new MatchDayBet.Outcome[](1);
+        results[0] = MatchDayBet.Outcome.NONE;
+
+        vm.expectRevert(MatchDayBet.InvalidOutcome.selector);
+        betting.batchResolveMatches(matchIds, results);
+    }
+
+    function test_RevertBatchResolveMatches_TooSoon() public {
+        uint256 matchId = betting.createMatch("Arsenal", "Chelsea", "Premier League", KICKOFF_TIME);
+
+        // Warp to just before grace period ends
+        vm.warp(KICKOFF_TIME + 30 minutes);
+
+        uint256[] memory matchIds = new uint256[](1);
+        matchIds[0] = matchId;
+
+        MatchDayBet.Outcome[] memory results = new MatchDayBet.Outcome[](1);
+        results[0] = MatchDayBet.Outcome.HOME;
+
+        vm.expectRevert(MatchDayBet.KickoffNotReached.selector);
+        betting.batchResolveMatches(matchIds, results);
+    }
 }
