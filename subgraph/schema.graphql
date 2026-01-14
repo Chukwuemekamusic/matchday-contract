@@ -1,7 +1,187 @@
+# MatchDayBet V2 Subgraph Schema
+
+# Enums
+enum MatchStatus {
+  OPEN
+  CLOSED
+  RESOLVED
+  CANCELLED
+}
+
+enum Outcome {
+  NONE
+  HOME
+  DRAW
+  AWAY
+}
+
+# Core Entities
+
+"""
+Represents a football match betting market
+"""
+type Match @entity(immutable: false) {
+  id: ID! # matchId as string
+  matchId: BigInt!
+  homeTeam: String!
+  awayTeam: String!
+  competition: String!
+  kickoffTime: BigInt!
+
+  # Pools
+  totalPool: BigInt!
+  homePool: BigInt!
+  drawPool: BigInt!
+  awayPool: BigInt!
+
+  # Bet counts
+  homeBetCount: BigInt!
+  drawBetCount: BigInt!
+  awayBetCount: BigInt!
+  totalBetCount: BigInt!
+
+  # Status
+  status: MatchStatus!
+  result: Outcome!
+  platformFeeAmount: BigInt!
+
+  # Timestamps
+  createdAt: BigInt!
+  createdAtBlock: BigInt!
+  closedAt: BigInt
+  resolvedAt: BigInt
+  cancelledAt: BigInt
+
+  # Pause state (V2 feature)
+  isPaused: Boolean!
+
+  # Financial tracking (V2 feature)
+  totalClaimed: BigInt!
+
+  # Relationships
+  bets: [Bet!]! @derivedFrom(field: "match")
+
+  # Cancellation reason (if cancelled)
+  cancellationReason: String
+}
+
+"""
+Represents a single bet placed by a user
+"""
+type Bet @entity(immutable: false) {
+  id: ID! # matchId-userAddress
+  match: Match!
+  bettor: User!
+  amount: BigInt!
+  prediction: Outcome!
+  claimed: Boolean!
+
+  # Calculated when claimed
+  payout: BigInt
+  profit: BigInt # payout - amount (can be 0 for refunds)
+
+  # Timestamps
+  placedAt: BigInt!
+  placedAtBlock: BigInt!
+  claimedAt: BigInt
+
+  # Transaction reference
+  txHash: Bytes!
+}
+
+"""
+Represents a user (bettor)
+"""
+type User @entity(immutable: false) {
+  id: ID! # User address
+  address: Bytes!
+
+  # Betting statistics
+  totalBets: BigInt!
+  totalWagered: BigInt!
+  totalWon: BigInt!
+  totalClaimed: BigInt!
+  totalProfit: BigInt! # Can be negative
+
+  # Win/loss record
+  winCount: BigInt!
+  lossCount: BigInt!
+  refundCount: BigInt!
+
+  # Relationships
+  bets: [Bet!]! @derivedFrom(field: "bettor")
+
+  # Activity timestamps
+  firstBetAt: BigInt!
+  lastBetAt: BigInt!
+  lastActivityAt: BigInt!
+}
+
+"""
+Global protocol statistics
+"""
+type GlobalStats @entity(immutable: false) {
+  id: ID! # Always "1"
+
+  # Match statistics
+  totalMatches: BigInt!
+  activeMatches: BigInt!
+  resolvedMatches: BigInt!
+  cancelledMatches: BigInt!
+
+  # Betting statistics
+  totalBets: BigInt!
+  totalVolume: BigInt!
+  totalFeesCollected: BigInt!
+  totalPayouts: BigInt!
+
+  # User statistics
+  uniqueBettors: BigInt!
+
+  # Last updated
+  lastUpdatedAt: BigInt!
+}
+
+"""
+Match managers (bot addresses) - admin tracking
+"""
+type MatchManager @entity(immutable: false) {
+  id: ID! # Manager address
+  address: Bytes!
+  isActive: Boolean!
+  addedAt: BigInt!
+  addedAtBlock: BigInt!
+  removedAt: BigInt
+  removedAtBlock: BigInt
+}
+
+"""
+Contract upgrade tracking (from UUPS proxy)
+"""
 type Upgraded @entity(immutable: true) {
   id: Bytes!
-  implementation: Bytes! # address
+  implementation: Bytes! # New implementation address
   blockNumber: BigInt!
   blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+"""
+Platform configuration changes
+"""
+type ConfigUpdate @entity(immutable: true) {
+  id: ID! # txHash-logIndex
+  type: String! # "STAKE_LIMITS" | "PLATFORM_FEE"
+
+  # Stake limits
+  minStake: BigInt
+  maxStake: BigInt
+
+  # Platform fee
+  platformFeeBps: BigInt
+
+  # Metadata
+  blockNumber: BigInt!
+  timestamp: BigInt!
   transactionHash: Bytes!
 }

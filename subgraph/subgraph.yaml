@@ -16,11 +16,70 @@ dataSources:
       apiVersion: 0.0.9
       language: wasm/assemblyscript
       entities:
+        - Match
+        - Bet
+        - User
+        - GlobalStats
+        - MatchManager
         - Upgraded
+        - ConfigUpdate
       abis:
         - name: MatchDayBetV2
           file: ./abis/MatchDayBetV2.json
       eventHandlers:
+        # Match Lifecycle Events
+        - event: MatchCreated(indexed uint256,string,string,string,uint256)
+          handler: handleMatchCreated
+        - event: BettingClosed(indexed uint256)
+          handler: handleBettingClosed
+        - event: MatchResolved(indexed uint256,uint8,uint256,uint256,uint256)
+          handler: handleMatchResolved
+        - event: BatchMatchesResolved(uint256[],uint8[])
+          handler: handleBatchMatchesResolved
+        - event: MatchCancelled(indexed uint256,string)
+          handler: handleMatchCancelled
+        - event: BatchMatchesCancelled(uint256[],string)
+          handler: handleBatchMatchesCancelled
+
+        # Match Control Events (V2)
+        - event: MatchPaused(indexed uint256)
+          handler: handleMatchPaused
+        - event: MatchUnpaused(indexed uint256)
+          handler: handleMatchUnpaused
+
+        # Betting Events
+        - event: BetPlaced(indexed uint256,indexed address,uint8,uint256,uint256)
+          handler: handleBetPlaced
+
+        # Claim Events
+        - event: WinningsClaimed(indexed uint256,indexed address,uint256,uint256)
+          handler: handleWinningsClaimed
+        - event: RefundClaimed(indexed uint256,indexed address,uint256)
+          handler: handleRefundClaimed
+        - event: BatchWinningsClaimed(indexed address,uint256[],uint256)
+          handler: handleBatchWinningsClaimed
+        - event: BatchRefundsClaimed(indexed address,uint256[],uint256)
+          handler: handleBatchRefundsClaimed
+
+        # Admin Events
+        - event: FeesWithdrawn(indexed address,uint256)
+          handler: handleFeesWithdrawn
+        - event: StakeLimitsUpdated(uint256,uint256)
+          handler: handleStakeLimitsUpdated
+        - event: PlatformFeeUpdated(uint256)
+          handler: handlePlatformFeeUpdated
+        - event: MatchManagerAdded(indexed address)
+          handler: handleMatchManagerAdded
+        - event: MatchManagerRemoved(indexed address)
+          handler: handleMatchManagerRemoved
+        - event: OwnershipTransferred(indexed address,indexed address)
+          handler: handleOwnershipTransferred
+        - event: UpgradesLocked()
+          handler: handleUpgradesLocked
+        - event: EmergencyPausedByManager(indexed address)
+          handler: handleEmergencyPausedByManager
+
+        # Proxy Upgrade Event
         - event: Upgraded(indexed address)
           handler: handleUpgraded
       file: ./src/match-day-bet-v-2.ts
