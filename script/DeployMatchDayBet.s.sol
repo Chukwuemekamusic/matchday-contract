@@ -4,7 +4,7 @@ pragma solidity ^0.8.29;
 import {Script, console} from "forge-std/Script.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {MatchDayBetV1} from "../src/MatchDayBetV1.sol";
-import {MatchDayBetV2} from "../src/MatchDayBetV2.sol";
+import {MatchDayBetV3} from "../src/MatchDayBetV3.sol";
 
 /**
  * @title DeployMatchDayBet
@@ -138,13 +138,13 @@ contract UpgradeMatchDayBet is Script {
 
         vm.startBroadcast();
 
-        // Deploy new implementation (replace with V2, V3, etc.)
-        MatchDayBetV2 newImplementation = new MatchDayBetV2();
+        // Deploy new implementation (replace with V3, V4, etc.)
+        MatchDayBetV3 newImplementation = new MatchDayBetV3();
         console.log("New implementation:", address(newImplementation));
 
         // Upgrade proxy to new implementation
-        MatchDayBetV2 proxy = MatchDayBetV2(payable(proxyAddress));
-        bytes memory initData = abi.encodeWithSelector(MatchDayBetV2.initializeV2.selector);
+        MatchDayBetV3 proxy = MatchDayBetV3(payable(proxyAddress));
+        bytes memory initData = abi.encodeWithSelector(MatchDayBetV3.initializeV3.selector);
         proxy.upgradeToAndCall(address(newImplementation), initData);
 
         console.log("Upgrade complete!");
