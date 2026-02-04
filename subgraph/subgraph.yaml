@@ -5,11 +5,11 @@ schema:
   file: ./schema.graphql
 dataSources:
   - kind: ethereum
-    name: MatchDayBetV2
+    name: MatchDayBet
     network: base
     source:
       address: "0x1b048C7323C7c7FE910a5F0e08B36b0c715e8947"
-      abi: MatchDayBetV2
+      abi: MatchDayBet
       startBlock: 40551839
     mapping:
       kind: ethereum/events
@@ -24,8 +24,8 @@ dataSources:
         - Upgraded
         - ConfigUpdate
       abis:
-        - name: MatchDayBetV2
-          file: ./abis/MatchDayBetV2.json
+        - name: MatchDayBet
+          file: ./abis/MatchDayBet.json
       eventHandlers:
         # Match Lifecycle Events
         - event: MatchCreated(indexed uint256,string,string,string,uint256)
@@ -46,6 +46,18 @@ dataSources:
           handler: handleMatchPaused
         - event: MatchUnpaused(indexed uint256)
           handler: handleMatchUnpaused
+
+        # V3 Observability Events
+        - event: MatchResolutionSkipped(indexed uint256,uint8)
+          handler: handleMatchResolutionSkipped
+        - event: BatchMatchesResolvedSummary(uint256[],uint8[],uint256,uint256)
+          handler: handleBatchMatchesResolvedSummary
+        - event: MatchCancellationSkipped(indexed uint256,uint8)
+          handler: handleMatchCancellationSkipped
+        - event: BatchMatchesCancellationSummary(uint256[],string,uint256,uint256)
+          handler: handleBatchMatchesCancellationSummary
+        - event: GracePeriodUpdated(uint256)
+          handler: handleGracePeriodUpdated
 
         # Betting Events
         - event: BetPlaced(indexed uint256,indexed address,uint8,uint256,uint256)

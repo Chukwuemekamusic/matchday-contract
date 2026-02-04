@@ -8,7 +8,7 @@ import {
 } from "matchstick-as/assembly/index"
 import { Address } from "@graphprotocol/graph-ts"
 import { Upgraded } from "../generated/schema"
-import { Upgraded as UpgradedEvent } from "../generated/MatchDayBetV2/MatchDayBetV2"
+import { Upgraded as UpgradedEvent } from "../generated/MatchDayBet/MatchDayBet"
 import { handleUpgraded } from "../src/match-day-bet-v-2"
 import { createUpgradedEvent } from "./match-day-bet-v-2-utils"
 

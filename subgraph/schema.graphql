@@ -15,6 +15,19 @@ enum Outcome {
   AWAY
 }
 
+enum SkipReason {
+  NONE
+  ALREADY_RESOLVED_SAME_RESULT
+  ALREADY_RESOLVED_DIFFERENT_RESULT
+  ALREADY_CLOSED
+  ALREADY_CANCELLED
+  MATCH_NOT_FOUND
+  MATCH_IS_RESOLVED
+  MATCH_IS_CANCELLED
+  KICKOFF_NOT_REACHED
+  INVALID_OUTCOME
+}
+
 # Core Entities
 
 """
@@ -138,6 +151,13 @@ type GlobalStats @entity(immutable: false) {
   # User statistics
   uniqueBettors: BigInt!
 
+  # V3 Statistics
+  currentGracePeriod: BigInt! # Current grace period in seconds
+  totalBatchResolutions: BigInt! # Number of batch resolution operations
+  totalBatchCancellations: BigInt! # Number of batch cancellation operations
+  totalSkippedResolutions: BigInt! # Total matches skipped during resolution
+  totalSkippedCancellations: BigInt! # Total matches skipped during cancellation
+
   # Last updated
   lastUpdatedAt: BigInt!
 }
@@ -183,5 +203,71 @@ type ConfigUpdate @entity(immutable: true) {
   # Metadata
   blockNumber: BigInt!
   timestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+# ============ V3 Entities ============
+
+"""
+Track individual skipped match resolutions (V3)
+"""
+type MatchResolutionSkip @entity(immutable: true) {
+  id: ID! # txHash-logIndex-matchId
+  match: Match!
+  skipReason: SkipReason!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+"""
+Track batch resolution operations summary (V3)
+"""
+type BatchResolutionSummary @entity(immutable: true) {
+  id: ID! # txHash-logIndex
+  matchIds: [BigInt!]!
+  results: [Outcome!]!
+  resolvedCount: BigInt!
+  skippedCount: BigInt!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+"""
+Track individual skipped match cancellations (V3)
+"""
+type MatchCancellationSkip @entity(immutable: true) {
+  id: ID! # txHash-logIndex-matchId
+  match: Match!
+  skipReason: SkipReason!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+"""
+Track batch cancellation operations summary (V3)
+"""
+type BatchCancellationSummary @entity(immutable: true) {
+  id: ID! # txHash-logIndex
+  matchIds: [BigInt!]!
+  reason: String!
+  cancelledCount: BigInt!
+  skippedCount: BigInt!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+"""
+Track grace period configuration changes (V3)
+"""
+type GracePeriodUpdate @entity(immutable: true) {
+  id: ID! # txHash-logIndex
+  newGracePeriod: BigInt!
+  previousGracePeriod: BigInt
+  timestamp: BigInt!
+  blockNumber: BigInt!
   transactionHash: Bytes!
 }

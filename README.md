@@ -112,8 +112,8 @@ enum MatchStatus { OPEN, CLOSED, RESOLVED, CANCELLED }
 | Parameter    | Value        | Description                   |
 | ------------ | ------------ | ----------------------------- |
 | Platform Fee | 1% (100 bps) | Taken from pool on resolution |
-| Min Stake    | 0.0004 ETH   | ~$1 at $2500/ETH              |
-| Max Stake    | 0.04 ETH     | ~$100 at $2500/ETH            |
+| Min Stake    | 0.0001 ETH   | ~$1 at $2500/ETH              |
+| Max Stake    | 0.1 ETH      | ~$25 at $2500/ETH             |
 | Max Fee      | 5% (500 bps) | Hard cap on fee changes       |
 
 ## Events

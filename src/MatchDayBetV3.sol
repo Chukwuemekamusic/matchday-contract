@@ -28,7 +28,12 @@ import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/Pau
  * - Added BatchMatchesCancellationSummary event for observability
  * - made grace period configurable
  */
-contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, PausableUpgradeable {
+contract MatchDayBetV3 is
+    Initializable,
+    UUPSUpgradeable,
+    ReentrancyGuard,
+    PausableUpgradeable
+{
     // ============ Enums ============
 
     enum Outcome {
@@ -175,26 +180,47 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
     // ============ Events ============
 
     event MatchCreated(
-        uint256 indexed matchId, string homeTeam, string awayTeam, string competition, uint256 kickoffTime
+        uint256 indexed matchId,
+        string homeTeam,
+        string awayTeam,
+        string competition,
+        uint256 kickoffTime
     );
 
     event BetPlaced(
-        uint256 indexed matchId, address indexed bettor, Outcome prediction, uint256 amount, uint256 newPoolTotal
+        uint256 indexed matchId,
+        address indexed bettor,
+        Outcome prediction,
+        uint256 amount,
+        uint256 newPoolTotal
     );
 
     event BettingClosed(uint256 indexed matchId);
 
     event MatchResolved(
-        uint256 indexed matchId, Outcome result, uint256 totalPool, uint256 winnerPool, uint256 platformFee
+        uint256 indexed matchId,
+        Outcome result,
+        uint256 totalPool,
+        uint256 winnerPool,
+        uint256 platformFee
     );
 
     event BatchMatchesResolved(uint256[] matchIds, Outcome[] results);
 
     event MatchCancelled(uint256 indexed matchId, string reason);
 
-    event WinningsClaimed(uint256 indexed matchId, address indexed bettor, uint256 amount, uint256 profit);
+    event WinningsClaimed(
+        uint256 indexed matchId,
+        address indexed bettor,
+        uint256 amount,
+        uint256 profit
+    );
 
-    event RefundClaimed(uint256 indexed matchId, address indexed bettor, uint256 amount);
+    event RefundClaimed(
+        uint256 indexed matchId,
+        address indexed bettor,
+        uint256 amount
+    );
 
     event FeesWithdrawn(address indexed to, uint256 amount);
 
@@ -206,16 +232,27 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
 
     event MatchManagerRemoved(address indexed manager);
 
-    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+    event OwnershipTransferred(
+        address indexed previousOwner,
+        address indexed newOwner
+    );
 
     event UpgradesLocked();
 
     event EmergencyPausedByManager(address indexed manager);
 
     // V2 Events
-    event BatchWinningsClaimed(address indexed user, uint256[] matchIds, uint256 totalPayout);
+    event BatchWinningsClaimed(
+        address indexed user,
+        uint256[] matchIds,
+        uint256 totalPayout
+    );
 
-    event BatchRefundsClaimed(address indexed user, uint256[] matchIds, uint256 totalRefund);
+    event BatchRefundsClaimed(
+        address indexed user,
+        uint256[] matchIds,
+        uint256 totalRefund
+    );
 
     event MatchPaused(uint256 indexed matchId);
 
@@ -225,9 +262,19 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
 
     // V3 Events
     event MatchResolutionSkipped(uint256 indexed matchId, SkipReason reason);
-    event BatchMatchesResolvedSummary(uint256[] matchIds, Outcome[] results, uint256 resolved, uint256 skipped);
+    event BatchMatchesResolvedSummary(
+        uint256[] matchIds,
+        Outcome[] results,
+        uint256 resolved,
+        uint256 skipped
+    );
     event MatchCancellationSkipped(uint256 indexed matchId, SkipReason reason);
-    event BatchMatchesCancellationSummary(uint256[] matchIds, string reason, uint256 cancelled, uint256 skipped);
+    event BatchMatchesCancellationSummary(
+        uint256[] matchIds,
+        string reason,
+        uint256 cancelled,
+        uint256 skipped
+    );
     event GracePeriodUpdated(uint256 newGracePeriod);
 
     // ============ Errors ============
@@ -349,11 +396,7 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
      */
     function _authorizeUpgrade(
         address /* newImplementation */
-    )
-        internal
-        override
-        onlyOwner
-    {
+    ) internal override onlyOwner {
         if (upgradesLocked) revert UpgradesAreLocked();
     }
 
@@ -447,14 +490,22 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
             competition: competition
         });
 
-        emit MatchCreated(matchId, homeTeam, awayTeam, competition, kickoffTime);
+        emit MatchCreated(
+            matchId,
+            homeTeam,
+            awayTeam,
+            competition,
+            kickoffTime
+        );
     }
 
     /**
      * @notice Close betting for a match (usually called at kickoff)
      * @param matchId The ID of the match
      */
-    function closeBetting(uint256 matchId) external onlyMatchManager matchExists(matchId) {
+    function closeBetting(
+        uint256 matchId
+    ) external onlyMatchManager matchExists(matchId) {
         Match storage matchData = matches[matchId];
 
         if (matchData.status != MatchStatus.OPEN) revert MatchNotOpen();
@@ -469,7 +520,10 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
      * @param matchId The ID of the match
      * @param result The match outcome (HOME, DRAW, or AWAY)
      */
-    function resolveMatch(uint256 matchId, Outcome result) external onlyMatchManager matchExists(matchId) {
+    function resolveMatch(
+        uint256 matchId,
+        Outcome result
+    ) external onlyMatchManager matchExists(matchId) {
         _resolveMatch(matchId, result);
     }
 
@@ -478,17 +532,16 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
      * @param matchIds Array of match IDs
      * @param results Array of match outcomes
      */
-    function batchResolveMatches(uint256[] calldata matchIds, Outcome[] calldata results)
-        external
-        onlyMatchManager
-        returns (uint256 resolved, uint256 skipped)
-    {
+    function batchResolveMatches(
+        uint256[] calldata matchIds,
+        Outcome[] calldata results
+    ) external onlyMatchManager returns (uint256 resolved, uint256 skipped) {
         if (matchIds.length != results.length) revert ArrayLengthMismatch();
         if (matchIds.length == 0) revert EmptyArray();
         if (matchIds.length > MAX_BATCH_SIZE) revert BatchTooLarge();
 
         uint256 length = matchIds.length;
-        for (uint256 i; i < length;) {
+        for (uint256 i; i < length; ) {
             bool success = _tryResolveMatch(matchIds[i], results[i]);
             if (success) {
                 unchecked {
@@ -514,7 +567,10 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
      * @param matchId The ID of the match
      * @param reason The reason for cancellation
      */
-    function cancelMatch(uint256 matchId, string calldata reason) external onlyMatchManager matchExists(matchId) {
+    function cancelMatch(
+        uint256 matchId,
+        string calldata reason
+    ) external onlyMatchManager matchExists(matchId) {
         Match storage matchData = matches[matchId];
 
         if (matchData.status == MatchStatus.RESOLVED) {
@@ -532,16 +588,15 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
      * @param matchIds Array of match IDs to cancel
      * @param reason The reason for cancellation
      */
-    function batchCancelMatches(uint256[] calldata matchIds, string calldata reason)
-        external
-        onlyMatchManager
-        returns (uint256 cancelled, uint256 skipped)
-    {
+    function batchCancelMatches(
+        uint256[] calldata matchIds,
+        string calldata reason
+    ) external onlyMatchManager returns (uint256 cancelled, uint256 skipped) {
         if (matchIds.length == 0) revert EmptyArray();
         if (matchIds.length > MAX_BATCH_SIZE) revert BatchTooLarge();
 
         uint256 length = matchIds.length;
-        for (uint256 i; i < length;) {
+        for (uint256 i; i < length; ) {
             bool success = _tryCancelMatch(matchIds[i], reason);
             if (success) {
                 unchecked {
@@ -558,7 +613,12 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
         }
 
         emit BatchMatchesCancelled(matchIds, reason);
-        emit BatchMatchesCancellationSummary(matchIds, reason, cancelled, skipped);
+        emit BatchMatchesCancellationSummary(
+            matchIds,
+            reason,
+            cancelled,
+            skipped
+        );
         return (cancelled, skipped);
     }
 
@@ -566,7 +626,9 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
      * @notice Pause a specific match (V2)
      * @param matchId The ID of the match to pause
      */
-    function pauseMatch(uint256 matchId) external onlyMatchManager matchExists(matchId) {
+    function pauseMatch(
+        uint256 matchId
+    ) external onlyMatchManager matchExists(matchId) {
         matchPaused[matchId] = true;
         emit MatchPaused(matchId);
     }
@@ -575,7 +637,9 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
      * @notice Unpause a specific match (V2)
      * @param matchId The ID of the match to unpause
      */
-    function unpauseMatch(uint256 matchId) external onlyOwner matchExists(matchId) {
+    function unpauseMatch(
+        uint256 matchId
+    ) external onlyOwner matchExists(matchId) {
         matchPaused[matchId] = false;
         emit MatchUnpaused(matchId);
     }
@@ -594,7 +658,10 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
      * @param newGracePeriod The new grace period in seconds
      */
     function setGracePeriod(uint256 newGracePeriod) external onlyOwner {
-        if (newGracePeriod < MIN_GRACE_PERIOD || newGracePeriod > MAX_GRACE_PERIOD) {
+        if (
+            newGracePeriod < MIN_GRACE_PERIOD ||
+            newGracePeriod > MAX_GRACE_PERIOD
+        ) {
             revert InvalidGracePeriod();
         }
         gracePeriod = newGracePeriod;
@@ -608,7 +675,10 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
      * @param matchId The ID of the match to bet on
      * @param prediction The predicted outcome (HOME, DRAW, or AWAY)
      */
-    function placeBet(uint256 matchId, Outcome prediction)
+    function placeBet(
+        uint256 matchId,
+        Outcome prediction
+    )
         external
         payable
         nonReentrant
@@ -624,7 +694,9 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
      * @notice Claim winnings for a resolved match
      * @param matchId The ID of the match
      */
-    function claimWinnings(uint256 matchId) external nonReentrant matchExists(matchId) {
+    function claimWinnings(
+        uint256 matchId
+    ) external nonReentrant matchExists(matchId) {
         Match storage matchData = matches[matchId];
 
         _validateClaim(matchData, matchId);
@@ -650,17 +722,22 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
      * @return totalPayout Total amount claimed
      * @dev Skips matches that can't be claimed (doesn't revert entire tx)
      */
-    function batchClaimWinnings(uint256[] calldata matchIds) external nonReentrant returns (uint256 totalPayout) {
+    function batchClaimWinnings(
+        uint256[] calldata matchIds
+    ) external nonReentrant returns (uint256 totalPayout) {
         if (matchIds.length == 0) revert EmptyArray();
         if (matchIds.length > MAX_BATCH_SIZE) revert BatchTooLarge();
 
         uint256 length = matchIds.length;
-        for (uint256 i; i < length;) {
+        for (uint256 i; i < length; ) {
             uint256 matchId = matchIds[i];
             Match storage matchData = matches[matchId];
 
             // Skip if not resolved or user hasn't bet
-            if (matchData.status != MatchStatus.RESOLVED || !hasBet[matchId][msg.sender]) {
+            if (
+                matchData.status != MatchStatus.RESOLVED ||
+                !hasBet[matchId][msg.sender]
+            ) {
                 unchecked {
                     ++i;
                 }
@@ -692,7 +769,9 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
             matchTotalClaimed[matchId] += payout;
             totalPayout += payout;
 
-            uint256 profit = payout > userBet.amount ? payout - userBet.amount : 0;
+            uint256 profit = payout > userBet.amount
+                ? payout - userBet.amount
+                : 0;
             emit WinningsClaimed(matchId, msg.sender, payout, profit);
 
             unchecked {
@@ -712,7 +791,9 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
      * @notice Claim refund for a cancelled match
      * @param matchId The ID of the match
      */
-    function claimRefund(uint256 matchId) external nonReentrant matchExists(matchId) {
+    function claimRefund(
+        uint256 matchId
+    ) external nonReentrant matchExists(matchId) {
         Match storage matchData = matches[matchId];
 
         if (matchData.status != MatchStatus.CANCELLED) {
@@ -738,17 +819,22 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
      * @param matchIds Array of match IDs
      * @return totalRefund Total refund amount
      */
-    function batchClaimRefunds(uint256[] calldata matchIds) external nonReentrant returns (uint256 totalRefund) {
+    function batchClaimRefunds(
+        uint256[] calldata matchIds
+    ) external nonReentrant returns (uint256 totalRefund) {
         if (matchIds.length == 0) revert EmptyArray();
         if (matchIds.length > MAX_BATCH_SIZE) revert BatchTooLarge();
 
         uint256 length = matchIds.length;
-        for (uint256 i; i < length;) {
+        for (uint256 i; i < length; ) {
             uint256 matchId = matchIds[i];
             Match storage matchData = matches[matchId];
 
             // Skip if not cancelled or user hasn't bet
-            if (matchData.status != MatchStatus.CANCELLED || !hasBet[matchId][msg.sender]) {
+            if (
+                matchData.status != MatchStatus.CANCELLED ||
+                !hasBet[matchId][msg.sender]
+            ) {
                 unchecked {
                     ++i;
                 }
@@ -852,7 +938,13 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
      * @param matchId The ID of the match
      * @return homeOdds Draw odds Away odds (in basis points)
      */
-    function getOdds(uint256 matchId) external view returns (uint256 homeOdds, uint256 drawOdds, uint256 awayOdds) {
+    function getOdds(
+        uint256 matchId
+    )
+        external
+        view
+        returns (uint256 homeOdds, uint256 drawOdds, uint256 awayOdds)
+    {
         Match storage matchData = matches[matchId];
 
         if (matchData.totalPool == 0) {
@@ -868,9 +960,20 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
      * @param matchId The ID of the match
      * @return total Home pool Draw pool Away pool
      */
-    function getPools(uint256 matchId) external view returns (uint256 total, uint256 home, uint256 draw, uint256 away) {
+    function getPools(
+        uint256 matchId
+    )
+        external
+        view
+        returns (uint256 total, uint256 home, uint256 draw, uint256 away)
+    {
         Match storage matchData = matches[matchId];
-        return (matchData.totalPool, matchData.homePool, matchData.drawPool, matchData.awayPool);
+        return (
+            matchData.totalPool,
+            matchData.homePool,
+            matchData.drawPool,
+            matchData.awayPool
+        );
     }
 
     /**
@@ -879,7 +982,10 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
      * @param user The user's address
      * @return Bet struct with user's bet details
      */
-    function getUserBet(uint256 matchId, address user) external view returns (Bet memory) {
+    function getUserBet(
+        uint256 matchId,
+        address user
+    ) external view returns (Bet memory) {
         return userBets[matchId][user];
     }
 
@@ -889,7 +995,10 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
      * @param user The user's address
      * @return bool True if user has bet
      */
-    function hasUserBet(uint256 matchId, address user) external view returns (bool) {
+    function hasUserBet(
+        uint256 matchId,
+        address user
+    ) external view returns (bool) {
         return hasBet[matchId][user];
     }
 
@@ -909,13 +1018,19 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
      * @return drawBets Number of draw bets
      * @return awayBets Number of away bets
      */
-    function getBetCounts(uint256 matchId)
+    function getBetCounts(
+        uint256 matchId
+    )
         external
         view
         returns (uint256 homeBets, uint256 drawBets, uint256 awayBets)
     {
         Match storage matchData = matches[matchId];
-        return (matchData.homeBetCount, matchData.drawBetCount, matchData.awayBetCount);
+        return (
+            matchData.homeBetCount,
+            matchData.drawBetCount,
+            matchData.awayBetCount
+        );
     }
 
     /**
@@ -925,11 +1040,11 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
      * @param amount The bet amount
      * @return potentialPayout The potential payout if this outcome wins
      */
-    function calculatePotentialWinnings(uint256 matchId, Outcome outcome, uint256 amount)
-        external
-        view
-        returns (uint256 potentialPayout)
-    {
+    function calculatePotentialWinnings(
+        uint256 matchId,
+        Outcome outcome,
+        uint256 amount
+    ) external view returns (uint256 potentialPayout) {
         Match storage matchData = matches[matchId];
 
         uint256 newTotalPool = matchData.totalPool + amount;
@@ -948,7 +1063,10 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
      * @param user The user's address
      * @return status ClaimStatus struct with canClaim, claimType, amount
      */
-    function getClaimStatus(uint256 matchId, address user) external view returns (ClaimStatus memory status) {
+    function getClaimStatus(
+        uint256 matchId,
+        address user
+    ) external view returns (ClaimStatus memory status) {
         Match storage matchData = matches[matchId];
 
         if (!hasBet[matchId][user]) {
@@ -966,10 +1084,16 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
             // Check if user won OR if no winners (refund case)
             if (winnerPool == 0 || userBet.prediction == matchData.result) {
                 uint256 payout = _calculatePayout(matchData, userBet);
-                return ClaimStatus({canClaim: true, claimType: 1, amount: payout});
+                return
+                    ClaimStatus({canClaim: true, claimType: 1, amount: payout});
             }
         } else if (matchData.status == MatchStatus.CANCELLED) {
-            return ClaimStatus({canClaim: true, claimType: 2, amount: userBet.amount});
+            return
+                ClaimStatus({
+                    canClaim: true,
+                    claimType: 2,
+                    amount: userBet.amount
+                });
         }
 
         return ClaimStatus({canClaim: false, claimType: 0, amount: 0});
@@ -982,7 +1106,10 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
      * @return claimableMatches Array of match IDs with unclaimed winnings
      * @return payouts Corresponding payout amounts
      */
-    function getUnclaimedWinnings(address user, uint256[] calldata matchIds)
+    function getUnclaimedWinnings(
+        address user,
+        uint256[] calldata matchIds
+    )
         external
         view
         returns (uint256[] memory claimableMatches, uint256[] memory payouts)
@@ -992,20 +1119,32 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
         uint256[] memory tempMatches = new uint256[](length);
         uint256[] memory tempPayouts = new uint256[](length);
 
-        for (uint256 i; i < length;) {
+        for (uint256 i; i < length; ) {
             uint256 matchId = matchIds[i];
             Match storage matchData = matches[matchId];
 
-            if (matchData.status == MatchStatus.RESOLVED && hasBet[matchId][user]) {
+            if (
+                matchData.status == MatchStatus.RESOLVED &&
+                hasBet[matchId][user]
+            ) {
                 Bet storage userBet = userBets[matchId][user];
 
                 if (!userBet.claimed) {
-                    uint256 winnerPool = _getOutcomePool(matchData, matchData.result);
+                    uint256 winnerPool = _getOutcomePool(
+                        matchData,
+                        matchData.result
+                    );
 
                     // Include if user won OR if no winners (refund)
-                    if (winnerPool == 0 || userBet.prediction == matchData.result) {
+                    if (
+                        winnerPool == 0 ||
+                        userBet.prediction == matchData.result
+                    ) {
                         tempMatches[count] = matchId;
-                        tempPayouts[count] = _calculatePayout(matchData, userBet);
+                        tempPayouts[count] = _calculatePayout(
+                            matchData,
+                            userBet
+                        );
                         count++;
                     }
                 }
@@ -1019,7 +1158,7 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
         // Resize arrays to actual count
         claimableMatches = new uint256[](count);
         payouts = new uint256[](count);
-        for (uint256 i; i < count;) {
+        for (uint256 i; i < count; ) {
             claimableMatches[i] = tempMatches[i];
             payouts[i] = tempPayouts[i];
             unchecked {
@@ -1042,11 +1181,13 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
      * @return matchData Array of Match structs
      * @dev Useful for batch loading in bot/frontend
      */
-    function getMatches(uint256[] calldata matchIds) external view returns (Match[] memory matchData) {
+    function getMatches(
+        uint256[] calldata matchIds
+    ) external view returns (Match[] memory matchData) {
         uint256 length = matchIds.length;
         matchData = new Match[](length);
 
-        for (uint256 i; i < length;) {
+        for (uint256 i; i < length; ) {
             matchData[i] = matches[matchIds[i]];
             unchecked {
                 ++i;
@@ -1062,11 +1203,10 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
      * @return alreadyClaimed Whether user has already claimed
      * @dev Returns the exact amount that was/will be paid out, using same calculation as claimWinnings()
      */
-    function getClaimableAmount(uint256 matchId, address user)
-        external
-        view
-        returns (uint256 payoutAmount, bool alreadyClaimed)
-    {
+    function getClaimableAmount(
+        uint256 matchId,
+        address user
+    ) external view returns (uint256 payoutAmount, bool alreadyClaimed) {
         Match storage matchData = matches[matchId];
 
         // Not a valid bet
@@ -1107,7 +1247,10 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
      * @return statuses Array of claim statuses (0=not claimable, 1=claimable, 2=already claimed)
      * @dev This is more efficient than calling getClaimableAmount() multiple times
      */
-    function getBatchClaimableAmounts(address user, uint256[] calldata matchIds)
+    function getBatchClaimableAmounts(
+        address user,
+        uint256[] calldata matchIds
+    )
         external
         view
         returns (uint256[] memory amounts, uint8[] memory statuses)
@@ -1116,7 +1259,7 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
         amounts = new uint256[](length);
         statuses = new uint8[](length);
 
-        for (uint256 i; i < length;) {
+        for (uint256 i; i < length; ) {
             uint256 matchId = matchIds[i];
             Match storage matchData = matches[matchId];
 
@@ -1133,9 +1276,15 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
                     statuses[i] = 2;
                 } else if (matchData.status == MatchStatus.RESOLVED) {
                     // Check if won
-                    uint256 winnerPool = _getOutcomePool(matchData, matchData.result);
+                    uint256 winnerPool = _getOutcomePool(
+                        matchData,
+                        matchData.result
+                    );
 
-                    if (winnerPool == 0 || userBet.prediction == matchData.result) {
+                    if (
+                        winnerPool == 0 ||
+                        userBet.prediction == matchData.result
+                    ) {
                         // User won or no winners (refund) - calculate payout
                         amounts[i] = _calculatePayout(matchData, userBet);
                         statuses[i] = 1; // Claimable
@@ -1159,7 +1308,9 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
      * @return unclaimedAmount Amount still to be claimed
      * @dev Useful for analytics and verifying all claims have been processed
      */
-    function getMatchFinancials(uint256 matchId)
+    function getMatchFinancials(
+        uint256 matchId
+    )
         external
         view
         returns (
@@ -1188,12 +1339,16 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
                 totalClaimable = matchData.totalPool - platformFee;
             }
 
-            unclaimedAmount = totalClaimable > totalClaimed ? totalClaimable - totalClaimed : 0;
+            unclaimedAmount = totalClaimable > totalClaimed
+                ? totalClaimable - totalClaimed
+                : 0;
         } else if (matchData.status == MatchStatus.CANCELLED) {
             // Cancelled - Full refunds, no fee
             platformFee = 0;
             totalClaimable = matchData.totalPool;
-            unclaimedAmount = totalClaimable > totalClaimed ? totalClaimable - totalClaimed : 0;
+            unclaimedAmount = totalClaimable > totalClaimed
+                ? totalClaimable - totalClaimed
+                : 0;
         } else {
             // Not resolved yet - Estimated fee
             platformFee = _getPlatformFee(matchData.totalPool);
@@ -1210,10 +1365,16 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
         // V3 CHANGE: Skip if already resolved (idempotent for batch operations)
         if (matchData.status == MatchStatus.RESOLVED) {
             if (matchData.result == result) {
-                emit MatchResolutionSkipped(matchId, SkipReason.ALREADY_RESOLVED_SAME_RESULT);
+                emit MatchResolutionSkipped(
+                    matchId,
+                    SkipReason.ALREADY_RESOLVED_SAME_RESULT
+                );
                 return;
             }
-            emit MatchResolutionSkipped(matchId, SkipReason.ALREADY_RESOLVED_DIFFERENT_RESULT);
+            emit MatchResolutionSkipped(
+                matchId,
+                SkipReason.ALREADY_RESOLVED_DIFFERENT_RESULT
+            );
             return;
         }
 
@@ -1232,14 +1393,23 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
         uint256 winnerPool = _getOutcomePool(matchData, result);
         uint256 platformFee = _calculateAndStoreFee(matchData, winnerPool);
 
-        emit MatchResolved(matchId, result, matchData.totalPool, winnerPool, platformFee);
+        emit MatchResolved(
+            matchId,
+            result,
+            matchData.totalPool,
+            winnerPool,
+            platformFee
+        );
     }
 
     /**
      * @dev V3: Try to resolve - returns success/failure instead of reverting
      * Used by batchResolveMatches for skip-on-failure behavior
      */
-    function _tryResolveMatch(uint256 matchId, Outcome result) internal returns (bool success) {
+    function _tryResolveMatch(
+        uint256 matchId,
+        Outcome result
+    ) internal returns (bool success) {
         Match storage matchData = matches[matchId];
 
         // non-existent match
@@ -1257,9 +1427,15 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
         // already resolved
         if (matchData.status == MatchStatus.RESOLVED) {
             if (matchData.result == result) {
-                emit MatchResolutionSkipped(matchId, SkipReason.ALREADY_RESOLVED_SAME_RESULT);
+                emit MatchResolutionSkipped(
+                    matchId,
+                    SkipReason.ALREADY_RESOLVED_SAME_RESULT
+                );
             } else {
-                emit MatchResolutionSkipped(matchId, SkipReason.ALREADY_RESOLVED_DIFFERENT_RESULT);
+                emit MatchResolutionSkipped(
+                    matchId,
+                    SkipReason.ALREADY_RESOLVED_DIFFERENT_RESULT
+                );
             }
             return false;
         }
@@ -1272,7 +1448,10 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
 
         // kickoff not reached
         if (block.timestamp < matchData.kickoffTime + gracePeriod) {
-            emit MatchResolutionSkipped(matchId, SkipReason.KICKOFF_NOT_REACHED);
+            emit MatchResolutionSkipped(
+                matchId,
+                SkipReason.KICKOFF_NOT_REACHED
+            );
             return false;
         }
 
@@ -1288,12 +1467,21 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
         uint256 winnerPool = _getOutcomePool(matchData, result);
         uint256 platformFee = _calculateAndStoreFee(matchData, winnerPool);
 
-        emit MatchResolved(matchId, result, matchData.totalPool, winnerPool, platformFee);
+        emit MatchResolved(
+            matchId,
+            result,
+            matchData.totalPool,
+            winnerPool,
+            platformFee
+        );
 
         return true;
     }
 
-    function _tryCancelMatch(uint256 matchId, string calldata reason) internal returns (bool success) {
+    function _tryCancelMatch(
+        uint256 matchId,
+        string calldata reason
+    ) internal returns (bool success) {
         Match storage matchData = matches[matchId];
 
         // non-existent match
@@ -1304,7 +1492,10 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
 
         // already resolved
         if (matchData.status == MatchStatus.RESOLVED) {
-            emit MatchCancellationSkipped(matchId, SkipReason.MATCH_IS_RESOLVED);
+            emit MatchCancellationSkipped(
+                matchId,
+                SkipReason.MATCH_IS_RESOLVED
+            );
             return false;
         }
 
@@ -1322,7 +1513,11 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
     /**
      * @dev Validate bet parameters
      */
-    function _validateBet(uint256 matchId, Outcome prediction, uint256 amount) internal view {
+    function _validateBet(
+        uint256 matchId,
+        Outcome prediction,
+        uint256 amount
+    ) internal view {
         Match storage matchData = matches[matchId];
 
         if (matchData.status != MatchStatus.OPEN) revert MatchNotOpen();
@@ -1336,7 +1531,11 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
     /**
      * @dev Process and store a bet
      */
-    function _processBet(uint256 matchId, Outcome prediction, uint256 amount) internal {
+    function _processBet(
+        uint256 matchId,
+        Outcome prediction,
+        uint256 amount
+    ) internal {
         Match storage matchData = matches[matchId];
 
         // Update pools and bet counts
@@ -1354,19 +1553,32 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
         }
 
         // Store bet
-        userBets[matchId][msg.sender] =
-            Bet({bettor: msg.sender, amount: amount, prediction: prediction, claimed: false});
+        userBets[matchId][msg.sender] = Bet({
+            bettor: msg.sender,
+            amount: amount,
+            prediction: prediction,
+            claimed: false
+        });
 
         hasBet[matchId][msg.sender] = true;
 
-        emit BetPlaced(matchId, msg.sender, prediction, amount, matchData.totalPool);
+        emit BetPlaced(
+            matchId,
+            msg.sender,
+            prediction,
+            amount,
+            matchData.totalPool
+        );
     }
 
     /**
      * @dev Validate match resolution
      * V3 CHANGE: Removed RESOLVED check (now handled in _resolveMatch for idempotency)
      */
-    function _validateResolution(Match storage matchData, Outcome result) internal view {
+    function _validateResolution(
+        Match storage matchData,
+        Outcome result
+    ) internal view {
         // V3: RESOLVED check removed - handled in _resolveMatch
         if (matchData.status == MatchStatus.CANCELLED) {
             revert MatchAlreadyCancelled();
@@ -1380,7 +1592,10 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
     /**
      * @dev Calculate and store platform fee for resolved match
      */
-    function _calculateAndStoreFee(Match storage matchData, uint256 winnerPool) internal returns (uint256 platformFee) {
+    function _calculateAndStoreFee(
+        Match storage matchData,
+        uint256 winnerPool
+    ) internal returns (uint256 platformFee) {
         // Only take fee if there are winners AND losers
         if (winnerPool > 0 && winnerPool < matchData.totalPool) {
             platformFee = _getPlatformFee(matchData.totalPool);
@@ -1395,7 +1610,10 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
      * @dev Validate winning claim
      * FIXED in V2: Allow claims when winnerPool == 0 (refund case)
      */
-    function _validateClaim(Match storage matchData, uint256 matchId) internal view {
+    function _validateClaim(
+        Match storage matchData,
+        uint256 matchId
+    ) internal view {
         if (matchData.status != MatchStatus.RESOLVED) revert MatchNotResolved();
         if (!hasBet[matchId][msg.sender]) revert NoBetFound();
 
@@ -1415,7 +1633,10 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
      * @dev Calculate payout for a winning bet
      * FIXED in V2: Now handles winnerPool == 0 (no winners -> refund all)
      */
-    function _calculatePayout(Match storage matchData, Bet storage userBet) internal view returns (uint256 payout) {
+    function _calculatePayout(
+        Match storage matchData,
+        Bet storage userBet
+    ) internal view returns (uint256 payout) {
         uint256 winnerPool = _getOutcomePool(matchData, matchData.result);
 
         if (winnerPool == 0) {
@@ -1427,7 +1648,8 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
             payout = userBet.amount;
         } else {
             // NORMAL CASE - Winners split pool after fee
-            uint256 distributablePool = matchData.totalPool - matchData.platformFeeAmount;
+            uint256 distributablePool = matchData.totalPool -
+                matchData.platformFeeAmount;
             payout = (userBet.amount * distributablePool) / winnerPool;
         }
     }
@@ -1435,22 +1657,33 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
     /**
      * @dev Calculate odds for all outcomes
      */
-    function _calculateOdds(Match storage matchData) internal view returns (OddsCalculation memory calc) {
+    function _calculateOdds(
+        Match storage matchData
+    ) internal view returns (OddsCalculation memory calc) {
         calc.platformFee = matchData.status == MatchStatus.RESOLVED
             ? matchData.platformFeeAmount
             : _getPlatformFee(matchData.totalPool);
 
         calc.effectivePool = matchData.totalPool - calc.platformFee;
 
-        calc.homeOdds = matchData.homePool > 0 ? (calc.effectivePool * BASIS_POINTS) / matchData.homePool : 0;
-        calc.drawOdds = matchData.drawPool > 0 ? (calc.effectivePool * BASIS_POINTS) / matchData.drawPool : 0;
-        calc.awayOdds = matchData.awayPool > 0 ? (calc.effectivePool * BASIS_POINTS) / matchData.awayPool : 0;
+        calc.homeOdds = matchData.homePool > 0
+            ? (calc.effectivePool * BASIS_POINTS) / matchData.homePool
+            : 0;
+        calc.drawOdds = matchData.drawPool > 0
+            ? (calc.effectivePool * BASIS_POINTS) / matchData.drawPool
+            : 0;
+        calc.awayOdds = matchData.awayPool > 0
+            ? (calc.effectivePool * BASIS_POINTS) / matchData.awayPool
+            : 0;
     }
 
     /**
      * @dev Get the pool amount for a specific outcome
      */
-    function _getOutcomePool(Match memory matchData, Outcome outcome) internal pure returns (uint256) {
+    function _getOutcomePool(
+        Match memory matchData,
+        Outcome outcome
+    ) internal pure returns (uint256) {
         if (outcome == Outcome.HOME) return matchData.homePool;
         if (outcome == Outcome.DRAW) return matchData.drawPool;
         if (outcome == Outcome.AWAY) return matchData.awayPool;
@@ -1460,7 +1693,9 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
     /**
      * @dev Get the platform fee for a specific pool
      */
-    function _getPlatformFee(uint256 totalPool) internal view returns (uint256) {
+    function _getPlatformFee(
+        uint256 totalPool
+    ) internal view returns (uint256) {
         return (totalPool * platformFeeBps) / BASIS_POINTS;
     }
 
@@ -1475,7 +1710,7 @@ contract MatchDayBetV3 is Initializable, UUPSUpgradeable, ReentrancyGuard, Pausa
      * @dev Transfer payout to specified address
      */
     function _transferPayout(address to, uint256 amount) internal {
-        (bool success,) = payable(to).call{value: amount}("");
+        (bool success, ) = payable(to).call{value: amount}("");
         if (!success) revert TransferFailed();
     }
 

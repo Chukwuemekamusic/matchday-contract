@@ -1,6 +1,6 @@
 import { newMockEvent } from "matchstick-as"
 import { ethereum, Address } from "@graphprotocol/graph-ts"
-import { Upgraded } from "../generated/MatchDayBetV2/MatchDayBetV2"
+import { Upgraded } from "../generated/MatchDayBet/MatchDayBet"
 
 export function createUpgradedEvent(implementation: Address): Upgraded {
   let upgradedEvent = changetype<Upgraded>(newMockEvent())

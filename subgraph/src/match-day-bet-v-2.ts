@@ -21,8 +21,13 @@ import {
   OwnershipTransferred,
   UpgradesLocked,
   EmergencyPausedByManager,
-  Upgraded
-} from "../generated/MatchDayBetV2/MatchDayBetV2"
+  Upgraded,
+  MatchResolutionSkipped,
+  BatchMatchesResolvedSummary,
+  MatchCancellationSkipped,
+  BatchMatchesCancellationSummary,
+  GracePeriodUpdated
+} from "../generated/MatchDayBet/MatchDayBet"
 import {
   Match,
   Bet,
@@ -30,13 +35,19 @@ import {
   GlobalStats,
   MatchManager,
   ConfigUpdate,
-  Upgraded as UpgradedEntity
+  Upgraded as UpgradedEntity,
+  MatchResolutionSkip as MatchResolutionSkipEntity,
+  BatchResolutionSummary,
+  MatchCancellationSkip as MatchCancellationSkipEntity,
+  BatchCancellationSummary,
+  GracePeriodUpdate
 } from "../generated/schema"
 import {
   getOrCreateUser,
   getOrCreateGlobalStats,
   outcomeToString,
-  generateBetId
+  generateBetId,
+  skipReasonToString
 } from "./helpers"
 
 // ============ Match Lifecycle Handlers ============
@@ -517,4 +528,131 @@ export function handleUpgraded(event: Upgraded): void {
   upgrade.blockTimestamp = event.block.timestamp
   upgrade.transactionHash = event.transaction.hash
   upgrade.save()
+}
+
+// ============ V3 Observability Event Handlers ============
+
+/**
+ * Handle MatchResolutionSkipped event (V3)
+ * Tracks individual matches that were skipped during batch resolution
+ */
+export function handleMatchResolutionSkipped(event: MatchResolutionSkipped): void {
+  let skipId = event.transaction.hash.toHexString() + "-" + event.logIndex.toString() + "-" + event.params.matchId.toString()
+  let skip = new MatchResolutionSkipEntity(skipId)
+
+  // Load match (may not exist if MATCH_NOT_FOUND)
+  let match = Match.load(event.params.matchId.toString())
+  if (match != null) {
+    skip.match = match.id
+  }
+
+  skip.skipReason = skipReasonToString(event.params.reason)
+  skip.timestamp = event.block.timestamp
+  skip.blockNumber = event.block.number
+  skip.transactionHash = event.transaction.hash
+  skip.save()
+
+  // Update global stats
+  let stats = getOrCreateGlobalStats()
+  stats.totalSkippedResolutions = stats.totalSkippedResolutions.plus(BigInt.fromI32(1))
+  stats.lastUpdatedAt = event.block.timestamp
+  stats.save()
+}
+
+/**
+ * Handle BatchMatchesResolvedSummary event (V3)
+ * Tracks summary statistics for batch resolution operations
+ */
+export function handleBatchMatchesResolvedSummary(event: BatchMatchesResolvedSummary): void {
+  let summaryId = event.transaction.hash.toHexString() + "-" + event.logIndex.toString()
+  let summary = new BatchResolutionSummary(summaryId)
+
+  summary.matchIds = event.params.matchIds
+  summary.results = event.params.results.map<string>((outcome) => outcomeToString(outcome))
+  summary.resolvedCount = event.params.resolved
+  summary.skippedCount = event.params.skipped
+  summary.timestamp = event.block.timestamp
+  summary.blockNumber = event.block.number
+  summary.transactionHash = event.transaction.hash
+  summary.save()
+
+  // Update global stats
+  let stats = getOrCreateGlobalStats()
+  stats.totalBatchResolutions = stats.totalBatchResolutions.plus(BigInt.fromI32(1))
+  stats.lastUpdatedAt = event.block.timestamp
+  stats.save()
+}
+
+/**
+ * Handle MatchCancellationSkipped event (V3)
+ * Tracks individual matches that were skipped during batch cancellation
+ */
+export function handleMatchCancellationSkipped(event: MatchCancellationSkipped): void {
+  let skipId = event.transaction.hash.toHexString() + "-" + event.logIndex.toString() + "-" + event.params.matchId.toString()
+  let skip = new MatchCancellationSkipEntity(skipId)
+
+  // Load match (may not exist if MATCH_NOT_FOUND)
+  let match = Match.load(event.params.matchId.toString())
+  if (match != null) {
+    skip.match = match.id
+  }
+
+  skip.skipReason = skipReasonToString(event.params.reason)
+  skip.timestamp = event.block.timestamp
+  skip.blockNumber = event.block.number
+  skip.transactionHash = event.transaction.hash
+  skip.save()
+
+  // Update global stats
+  let stats = getOrCreateGlobalStats()
+  stats.totalSkippedCancellations = stats.totalSkippedCancellations.plus(BigInt.fromI32(1))
+  stats.lastUpdatedAt = event.block.timestamp
+  stats.save()
+}
+
+/**
+ * Handle BatchMatchesCancellationSummary event (V3)
+ * Tracks summary statistics for batch cancellation operations
+ */
+export function handleBatchMatchesCancellationSummary(event: BatchMatchesCancellationSummary): void {
+  let summaryId = event.transaction.hash.toHexString() + "-" + event.logIndex.toString()
+  let summary = new BatchCancellationSummary(summaryId)
+
+  summary.matchIds = event.params.matchIds
+  summary.reason = event.params.reason
+  summary.cancelledCount = event.params.cancelled
+  summary.skippedCount = event.params.skipped
+  summary.timestamp = event.block.timestamp
+  summary.blockNumber = event.block.number
+  summary.transactionHash = event.transaction.hash
+  summary.save()
+
+  // Update global stats
+  let stats = getOrCreateGlobalStats()
+  stats.totalBatchCancellations = stats.totalBatchCancellations.plus(BigInt.fromI32(1))
+  stats.lastUpdatedAt = event.block.timestamp
+  stats.save()
+}
+
+/**
+ * Handle GracePeriodUpdated event (V3)
+ * Tracks changes to the grace period configuration
+ */
+export function handleGracePeriodUpdated(event: GracePeriodUpdated): void {
+  let updateId = event.transaction.hash.toHexString() + "-" + event.logIndex.toString()
+  let update = new GracePeriodUpdate(updateId)
+
+  // Get previous grace period from global stats
+  let stats = getOrCreateGlobalStats()
+  update.previousGracePeriod = stats.currentGracePeriod
+  update.newGracePeriod = event.params.newGracePeriod
+  update.timestamp = event.block.timestamp
+  update.blockNumber = event.block.number
+  update.transactionHash = event.transaction.hash
+  update.save()
+
+  // Update global stats with new grace period
+  stats.currentGracePeriod = event.params.newGracePeriod
+  stats.lastUpdatedAt = event.block.timestamp
+  stats.save()
 }

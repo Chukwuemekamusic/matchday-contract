@@ -28,7 +28,7 @@ contract ClaimWinnings is Script {
 // forge script script/Interactions.s.sol:GetMatch \
 //   --rpc-url $BASE_RPC_URL \
 //   --sig "run(uint256)" \
-//   18 \
+//   42 \
 //   --broadcast
 
 contract GetMatch is Script {

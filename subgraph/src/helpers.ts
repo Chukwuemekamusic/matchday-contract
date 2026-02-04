@@ -58,6 +58,14 @@ export function getOrCreateGlobalStats(): GlobalStats {
     stats.totalFeesCollected = BigInt.fromI32(0)
     stats.totalPayouts = BigInt.fromI32(0)
     stats.uniqueBettors = BigInt.fromI32(0)
+
+    // V3 fields - Initialize with defaults
+    stats.currentGracePeriod = BigInt.fromI32(6300) // 105 minutes (MIN_GRACE_PERIOD)
+    stats.totalBatchResolutions = BigInt.fromI32(0)
+    stats.totalBatchCancellations = BigInt.fromI32(0)
+    stats.totalSkippedResolutions = BigInt.fromI32(0)
+    stats.totalSkippedCancellations = BigInt.fromI32(0)
+
     stats.lastUpdatedAt = BigInt.fromI32(0)
     stats.save()
   }
@@ -86,6 +94,23 @@ export function matchStatusToString(status: i32): string {
   if (status == 2) return "RESOLVED"
   if (status == 3) return "CANCELLED"
   return "OPEN"
+}
+
+/**
+ * Convert SkipReason enum value to string (V3)
+ */
+export function skipReasonToString(reason: i32): string {
+  if (reason == 0) return "NONE"
+  if (reason == 1) return "ALREADY_RESOLVED_SAME_RESULT"
+  if (reason == 2) return "ALREADY_RESOLVED_DIFFERENT_RESULT"
+  if (reason == 3) return "ALREADY_CLOSED"
+  if (reason == 4) return "ALREADY_CANCELLED"
+  if (reason == 5) return "MATCH_NOT_FOUND"
+  if (reason == 6) return "MATCH_IS_RESOLVED"
+  if (reason == 7) return "MATCH_IS_CANCELLED"
+  if (reason == 8) return "KICKOFF_NOT_REACHED"
+  if (reason == 9) return "INVALID_OUTCOME"
+  return "NONE"
 }
 
 /**
