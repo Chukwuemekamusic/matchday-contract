@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useReadContract } from "wagmi";
+import { LocalTime } from "@/components/LocalTime";
 import { Crest } from "@/components/Team";
 import { PoolBar } from "@/components/PoolBar";
+import { useHydrated } from "@/hooks/useHydrated";
 import { useProtocol } from "@/hooks/useProtocol";
 import { matchDayBet } from "@/lib/contract/config";
 import type { FixtureView } from "@/lib/db/types";
-import { fixtureAcceptsBets, fixtureBucket, statusLabel, type FixtureBucket } from "@/lib/fixtures";
+import { dayLabel, fixtureAcceptsBets, fixtureBucket, localDayKey, statusLabel, type FixtureBucket } from "@/lib/fixtures";
 import { formatEth } from "@/lib/format";
 import { Outcome, impliedMultiplier, type OnChainMatch } from "@/lib/match";
 
@@ -53,10 +55,27 @@ export function FixtureList({ fixtures, serverNow }: { fixtures: FixtureView[]; 
 
   const { feeBps } = useProtocol();
 
-  const visible = fixtures.filter(
-    (f) => fixtureBucket(f, now) === tab && (competition === "all" || f.competition_code === competition),
-  );
-  if (tab === "results") visible.reverse();
+  const hydrated = useHydrated();
+
+  const visible = useMemo(() => {
+    const list = fixtures.filter(
+      (f) => fixtureBucket(f, now) === tab && (competition === "all" || f.competition_code === competition),
+    );
+    return tab === "results" ? list.reverse() : list;
+  }, [fixtures, now, tab, competition]);
+
+  // Day headings depend on the viewer's time zone, so they're only built after hydration
+  const days = useMemo(() => {
+    const groups: { key: string; label: string; fixtures: FixtureView[] }[] = [];
+    if (!hydrated) return groups;
+    for (const f of visible) {
+      const kickoff = new Date(f.kickoff_at);
+      const key = localDayKey(kickoff);
+      if (groups.at(-1)?.key !== key) groups.push({ key, label: dayLabel(kickoff, new Date(now)), fixtures: [] });
+      groups.at(-1)!.fixtures.push(f);
+    }
+    return groups;
+  }, [visible, hydrated, now]);
 
   return (
     <div className="space-y-4">
@@ -66,6 +85,7 @@ export function FixtureList({ fixtures, serverNow }: { fixtures: FixtureView[]; 
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
+              aria-pressed={tab === t.key}
               className={`rounded-md px-3 py-1.5 ${tab === t.key ? "bg-accent text-white" : "text-muted hover:text-foreground"}`}
             >
               {t.label}
@@ -88,24 +108,47 @@ export function FixtureList({ fixtures, serverNow }: { fixtures: FixtureView[]; 
       </div>
 
       {visible.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-border p-10 text-center text-sm text-muted">
-          {tab === "upcoming" ? "No upcoming fixtures in the next week." : "Nothing here yet."}
-        </p>
-      ) : (
-        <ul className="space-y-2">
-          {visible.map((f) => (
-            <FixtureRow
-              key={f.id}
-              fixture={f}
-              match={f.onchain_match_id ? byMatchId.get(f.onchain_match_id) : undefined}
-              feeBps={feeBps}
-              now={now}
-            />
+        <EmptyState tab={tab} filtered={competition !== "all"} />
+      ) : !hydrated ? (
+        <ul className="space-y-2" aria-busy>
+          {visible.slice(0, 6).map((f) => (
+            <li key={f.id} className="h-[5.75rem] animate-pulse rounded-xl border border-border bg-surface" />
           ))}
         </ul>
+      ) : (
+        <div className="space-y-6">
+          {days.map((day) => (
+            <section key={day.key} className="space-y-2">
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">{day.label}</h2>
+              <ul className="space-y-2">
+                {day.fixtures.map((f) => (
+                  <FixtureRow
+                    key={f.id}
+                    fixture={f}
+                    match={f.onchain_match_id ? byMatchId.get(f.onchain_match_id) : undefined}
+                    feeBps={feeBps}
+                    now={now}
+                  />
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
       )}
     </div>
   );
+}
+
+function EmptyState({ tab, filtered }: { tab: FixtureBucket; filtered: boolean }) {
+  const text =
+    tab === "upcoming"
+      ? filtered
+        ? "No fixtures for this competition in the next two weeks."
+        : "No fixtures in the next two weeks — the leagues are probably on an international break. Check back soon."
+      : tab === "live"
+        ? "No matches in play or waiting for results right now."
+        : "No results from the last two days.";
+  return <p className="rounded-xl border border-dashed border-border p-10 text-center text-sm text-muted">{text}</p>;
 }
 
 function FixtureRow({
@@ -129,17 +172,17 @@ function FixtureRow({
         href={`/match/${f.id}`}
         className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-xl border border-border bg-surface p-4 transition hover:border-accent sm:grid-cols-[5.5rem_1fr_13rem]"
       >
-        <div className="hidden text-xs text-muted sm:block">
-          <div className="font-medium text-foreground">
-            {kickoff.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
-          </div>
-          <div>{kickoff.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}</div>
+        <div className="hidden text-sm font-medium sm:block">
+          <LocalTime date={kickoff} format="time" />
         </div>
 
         <div className="min-w-0 space-y-1.5">
           <div className="text-[11px] uppercase tracking-wide text-muted">
             {f.competition_name}
-            <span className="sm:hidden"> · {kickoff.toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" })}</span>
+            <span className="sm:hidden">
+              {" · "}
+              <LocalTime date={kickoff} format="time" />
+            </span>
           </div>
           {[
             { name: f.home_short ?? f.home_team, crest: f.home_crest, score: f.home_score },

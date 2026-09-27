@@ -39,3 +39,18 @@ export function statusLabel(status: string): string {
 export function requestTime(): number {
   return Date.now();
 }
+
+/** Local calendar-day key (YYYY-MM-DD in the viewer's time zone) used to group fixtures */
+export function localDayKey(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+/** "Today", "Tomorrow", "Yesterday" or e.g. "Sat 18 Oct" */
+export function dayLabel(date: Date, now: Date): string {
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const diffDays = Math.round((startOfDay(date) - startOfDay(now)) / 86400_000);
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Tomorrow";
+  if (diffDays === -1) return "Yesterday";
+  return date.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+}

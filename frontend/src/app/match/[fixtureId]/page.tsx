@@ -10,7 +10,12 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({ params }: PageProps<"/match/[fixtureId]">) {
   const id = Number((await params).fixtureId);
   const fixture = Number.isInteger(id) ? await getFixture(id).catch(() => null) : null;
-  return { title: fixture ? `${fixture.home_team} vs ${fixture.away_team} — MatchDay` : "Match — MatchDay" };
+  if (!fixture) return { title: "Match — MatchDay" };
+  const title = `${fixture.home_team} vs ${fixture.away_team} — MatchDay`;
+  const description = `${fixture.competition_name}: pick ${fixture.home_short ?? fixture.home_team}, the draw or ${
+    fixture.away_short ?? fixture.away_team
+  }. Winners split the pool.`;
+  return { title, description, openGraph: { title, description }, twitter: { title, description } };
 }
 
 export default async function MatchPage({ params }: PageProps<"/match/[fixtureId]">) {

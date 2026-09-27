@@ -1,22 +1,21 @@
 import { formatEther } from "viem";
 
-/** Format wei as ETH with up to `digits` decimals, trimming trailing zeros */
+/**
+ * Format wei as ETH. Shows `digits` decimals, but keeps two significant digits for
+ * small amounts (0.00002 instead of 0) and never renders a negative value as "-0".
+ */
 export function formatEth(wei: bigint, digits = 4): string {
-  const [whole, frac = ""] = formatEther(wei).split(".");
-  const trimmed = frac.slice(0, digits).replace(/0+$/, "");
-  if (!trimmed && wei > 0n && whole === "0") return `<0.${"0".repeat(digits - 1)}1`;
-  return trimmed ? `${whole}.${trimmed}` : whole;
-}
+  if (wei === 0n) return "0";
+  const negative = wei < 0n;
+  const [whole, frac = ""] = formatEther(negative ? -wei : wei).split(".");
 
-export function formatKickoff(date: Date | string | number): string {
-  const d = new Date(date);
-  return d.toLocaleString(undefined, {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  let decimals = digits;
+  if (whole === "0") {
+    const firstSignificant = frac.search(/[1-9]/);
+    if (firstSignificant >= digits) decimals = Math.min(firstSignificant + 2, 18);
+  }
+  const trimmed = frac.slice(0, decimals).replace(/0+$/, "");
+  return `${negative ? "-" : ""}${whole}${trimmed ? `.${trimmed}` : ""}`;
 }
 
 export function shortAddress(address: string): string {

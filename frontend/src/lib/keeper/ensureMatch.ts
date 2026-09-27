@@ -9,8 +9,8 @@ import { sendContractTx } from "./tx";
 
 /** Bets close at kickoff; don't spend gas creating a match nobody can bet on in time */
 const MIN_LEAD_MS = 3 * 60_000;
-/** Only create matches for fixtures in the near future */
-const MAX_LEAD_MS = 8 * 86400_000;
+/** Only create matches for fixtures in the synced window (two weeks ahead) */
+const MAX_LEAD_MS = 15 * 86400_000;
 const BETTABLE_STATUSES = new Set(["SCHEDULED", "TIMED"]);
 const MAX_STRING_BYTES = 64; // contract MAX_STRING_LENGTH
 

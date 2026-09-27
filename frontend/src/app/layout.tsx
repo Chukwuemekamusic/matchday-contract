@@ -1,13 +1,20 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ConnectWallet } from "@/components/ConnectWallet";
+import { NavLinks } from "@/components/NavLinks";
 import { contractAddress, chain } from "@/lib/contract/config";
+import { siteUrl } from "@/lib/site";
 import { Providers } from "./providers";
 import "./globals.css";
 
+const description = "Parimutuel football betting on Base. Pick home, draw or away; winners split the pool.";
+
 export const metadata: Metadata = {
+  metadataBase: siteUrl(),
   title: "MatchDay — pool betting on football",
-  description: "Parimutuel football betting on Base. Pick home, draw or away; winners split the pool.",
+  description,
+  openGraph: { siteName: "MatchDay", type: "website", description },
+  twitter: { card: "summary_large_image" },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -26,21 +33,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               <div className="ml-auto sm:order-last">
                 <ConnectWallet />
               </div>
-              <nav className="-mx-2 flex w-full items-center gap-1 text-sm text-muted sm:mx-0 sm:w-auto">
-                {[
-                  ["/", "Matches"],
-                  ["/me", "My bets"],
-                  ["/how-it-works", "How it works"],
-                ].map(([href, label]) => (
-                  <Link
-                    key={href}
-                    href={href}
-                    className="whitespace-nowrap rounded-md px-2 py-1 hover:bg-surface-muted hover:text-foreground"
-                  >
-                    {label}
-                  </Link>
-                ))}
-              </nav>
+              <NavLinks />
             </div>
           </header>
 

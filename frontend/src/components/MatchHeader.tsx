@@ -1,6 +1,6 @@
 import { Crest } from "@/components/Team";
 import { statusLabel } from "@/lib/fixtures";
-import { formatKickoff } from "@/lib/format";
+import { LocalTime } from "@/components/LocalTime";
 
 export interface MatchHeaderProps {
   competition: string;
@@ -27,7 +27,7 @@ export function MatchHeader({ competition, home, away, kickoff, status, score }:
         </div>
       </div>
       <div className="mt-4 text-sm text-muted">
-        {formatKickoff(kickoff)}
+        <LocalTime date={kickoff} />
         {status && <> · {statusLabel(status)}</>}
       </div>
     </section>

@@ -8,7 +8,8 @@ import { ChainGate } from "@/components/ChainGate";
 import { TxStatus } from "@/components/TxStatus";
 import { useTx } from "@/hooks/useTx";
 import { matchDayBet } from "@/lib/contract/config";
-import { formatEth, formatKickoff } from "@/lib/format";
+import { LocalTime } from "@/components/LocalTime";
+import { formatEth } from "@/lib/format";
 import { Outcome, betState, pickLabel, type BetState } from "@/lib/match";
 import { fetchUserBets } from "@/lib/subgraph";
 
@@ -89,7 +90,7 @@ function MyBetsFor({ address }: { address: `0x${string}` }) {
       {user && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Stat label="Bets" value={user.totalBets} />
-          <Stat label="Won / lost" value={`${user.winCount} / ${user.lossCount}`} />
+          <Stat label="Won · lost · refunded" value={`${user.winCount} · ${user.lossCount} · ${user.refundCount}`} />
           <Stat label="Staked" value={`${formatEth(BigInt(user.totalWagered))} ETH`} />
           <Stat label="Net profit" value={`${formatEth(BigInt(user.totalProfit))} ETH`} />
         </div>
@@ -129,7 +130,7 @@ function MyBetsFor({ address }: { address: `0x${string}` }) {
                     {b.match.homeTeam} vs {b.match.awayTeam}
                   </div>
                   <div className="text-xs text-muted">
-                    {b.match.competition} · {formatKickoff(Number(b.match.kickoffTime) * 1000)}
+                    {b.match.competition} · <LocalTime date={Number(b.match.kickoffTime) * 1000} />
                   </div>
                 </div>
                 <div className="text-right text-sm">

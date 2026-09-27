@@ -33,10 +33,15 @@ export async function upsertFixtures(matches: ApiMatch[]): Promise<number> {
   return rows.length;
 }
 
-/** Pull fixtures from yesterday to a week ahead (football-data free tier allows 10 days per call) */
+const DAY_MS = 86400_000;
+
+/**
+ * Pull fixtures from yesterday to two weeks ahead. football-data's free tier allows at most
+ * 10 days per request, so the window is fetched in two chunks.
+ */
 export async function syncFixtures() {
-  const from = new Date(Date.now() - 86400_000);
-  const to = new Date(Date.now() + 7 * 86400_000);
-  const matches = await fetchMatchesBetween(from, to);
+  const day = (offset: number) => new Date(Date.now() + offset * DAY_MS);
+  const chunks = await Promise.all([fetchMatchesBetween(day(-1), day(8)), fetchMatchesBetween(day(9), day(14))]);
+  const matches = chunks.flat();
   return { fetched: matches.length, upserted: await upsertFixtures(matches) };
 }
