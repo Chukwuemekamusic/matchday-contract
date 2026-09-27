@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f6f7f5;
+  --surface: #ffffff;
+  --surface-muted: #eef1ec;
+  --border: #dde2da;
+  --foreground: #151a16;
+  --muted: #5d685f;
+  --accent: #0f8a4a;
+  --accent-strong: #0b6b39;
+  --accent-soft: #dff3e7;
+  --home: #0f8a4a;
+  --draw: #8a8f86;
+  --away: #2f6fd6;
+  --danger: #c2372c;
+  --warning: #b7791f;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0d110e;
+    --surface: #151b17;
+    --surface-muted: #1b231d;
+    --border: #28322b;
+    --foreground: #e8ede9;
+    --muted: #98a59b;
+    --accent: #34c07a;
+    --accent-strong: #5fd697;
+    --accent-soft: #173524;
+    --home: #34c07a;
+    --draw: #8f988f;
+    --away: #5b93ef;
+    --danger: #ef6b5f;
+    --warning: #e0a44a;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-border: var(--border);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-soft: var(--accent-soft);
+  --color-home: var(--home);
+  --color-draw: var(--draw);
+  --color-away: var(--away);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
