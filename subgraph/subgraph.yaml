@@ -34,12 +34,8 @@ dataSources:
           handler: handleBettingClosed
         - event: MatchResolved(indexed uint256,uint8,uint256,uint256,uint256)
           handler: handleMatchResolved
-        - event: BatchMatchesResolved(uint256[],uint8[])
-          handler: handleBatchMatchesResolved
         - event: MatchCancelled(indexed uint256,string)
           handler: handleMatchCancelled
-        - event: BatchMatchesCancelled(uint256[],string)
-          handler: handleBatchMatchesCancelled
 
         # Match Control Events (V2)
         - event: MatchPaused(indexed uint256)
@@ -63,15 +59,12 @@ dataSources:
         - event: BetPlaced(indexed uint256,indexed address,uint8,uint256,uint256)
           handler: handleBetPlaced
 
-        # Claim Events
+        # Claim Events (batch claims also emit these per match, so the
+        # Batch*Claimed / BatchMatches* events are deliberately not indexed)
         - event: WinningsClaimed(indexed uint256,indexed address,uint256,uint256)
           handler: handleWinningsClaimed
         - event: RefundClaimed(indexed uint256,indexed address,uint256)
           handler: handleRefundClaimed
-        - event: BatchWinningsClaimed(indexed address,uint256[],uint256)
-          handler: handleBatchWinningsClaimed
-        - event: BatchRefundsClaimed(indexed address,uint256[],uint256)
-          handler: handleBatchRefundsClaimed
 
         # Admin Events
         - event: FeesWithdrawn(indexed address,uint256)

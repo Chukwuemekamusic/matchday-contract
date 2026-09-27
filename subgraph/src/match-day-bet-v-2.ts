@@ -1,18 +1,14 @@
-import { BigInt } from "@graphprotocol/graph-ts"
+import { Address, BigInt } from "@graphprotocol/graph-ts"
 import {
   MatchCreated,
   BettingClosed,
   MatchResolved,
-  BatchMatchesResolved,
   MatchCancelled,
-  BatchMatchesCancelled,
   MatchPaused,
   MatchUnpaused,
   BetPlaced,
   WinningsClaimed,
   RefundClaimed,
-  BatchWinningsClaimed,
-  BatchRefundsClaimed,
   FeesWithdrawn,
   StakeLimitsUpdated,
   PlatformFeeUpdated,
@@ -32,7 +28,6 @@ import {
   Match,
   Bet,
   User,
-  GlobalStats,
   MatchManager,
   ConfigUpdate,
   Upgraded as UpgradedEntity,
@@ -77,6 +72,7 @@ export function handleMatchCreated(event: MatchCreated): void {
   // Initialize status
   match.status = "OPEN"
   match.result = "NONE"
+  match.winnerPool = BigInt.fromI32(0)
   match.platformFeeAmount = BigInt.fromI32(0)
   match.isPaused = false
   match.totalClaimed = BigInt.fromI32(0)
@@ -117,11 +113,24 @@ export function handleMatchResolved(event: MatchResolved): void {
     return
   }
 
+  if (match.status == "RESOLVED" || match.status == "CANCELLED") {
+    return
+  }
+
   match.status = "RESOLVED"
   match.result = outcomeToString(event.params.result)
+  match.winnerPool = event.params.winnerPool
   match.platformFeeAmount = event.params.platformFee
   match.resolvedAt = event.block.timestamp
   match.save()
+
+  settleResolvedBets(
+    match,
+    event.params.totalPool,
+    event.params.winnerPool,
+    event.params.platformFee,
+    event.block.timestamp
+  )
 
   // Update global stats
   let stats = getOrCreateGlobalStats()
@@ -133,31 +142,6 @@ export function handleMatchResolved(event: MatchResolved): void {
 
 }
 
-export function handleBatchMatchesResolved(event: BatchMatchesResolved): void {
-  let matchIds = event.params.matchIds
-  let results = event.params.results
-
-  for (let i = 0; i < matchIds.length; i++) {
-    let matchId = matchIds[i].toString()
-    let match = Match.load(matchId)
-
-    if (match != null) {
-      match.status = "RESOLVED"
-      match.result = outcomeToString(results[i])
-      match.resolvedAt = event.block.timestamp
-      match.save()
-
-      // Update global stats
-      let stats = getOrCreateGlobalStats()
-      stats.activeMatches = stats.activeMatches.minus(BigInt.fromI32(1))
-      stats.resolvedMatches = stats.resolvedMatches.plus(BigInt.fromI32(1))
-      stats.lastUpdatedAt = event.block.timestamp
-      stats.save()
-    }
-  }
-
-}
-
 export function handleMatchCancelled(event: MatchCancelled): void {
   let matchId = event.params.matchId.toString()
   let match = Match.load(matchId)
@@ -166,10 +150,16 @@ export function handleMatchCancelled(event: MatchCancelled): void {
     return
   }
 
+  if (match.status == "RESOLVED" || match.status == "CANCELLED") {
+    return
+  }
+
   match.status = "CANCELLED"
   match.cancelledAt = event.block.timestamp
   match.cancellationReason = event.params.reason
   match.save()
+
+  settleCancelledBets(match, event.block.timestamp)
 
   // Update global stats
   let stats = getOrCreateGlobalStats()
@@ -177,30 +167,6 @@ export function handleMatchCancelled(event: MatchCancelled): void {
   stats.cancelledMatches = stats.cancelledMatches.plus(BigInt.fromI32(1))
   stats.lastUpdatedAt = event.block.timestamp
   stats.save()
-
-}
-
-export function handleBatchMatchesCancelled(event: BatchMatchesCancelled): void {
-  let matchIds = event.params.matchIds
-
-  for (let i = 0; i < matchIds.length; i++) {
-    let matchId = matchIds[i].toString()
-    let match = Match.load(matchId)
-
-    if (match != null) {
-      match.status = "CANCELLED"
-      match.cancelledAt = event.block.timestamp
-      match.cancellationReason = event.params.reason
-      match.save()
-
-      // Update global stats
-      let stats = getOrCreateGlobalStats()
-      stats.activeMatches = stats.activeMatches.minus(BigInt.fromI32(1))
-      stats.cancelledMatches = stats.cancelledMatches.plus(BigInt.fromI32(1))
-      stats.lastUpdatedAt = event.block.timestamp
-      stats.save()
-    }
-  }
 
 }
 
@@ -247,6 +213,7 @@ export function handleBetPlaced(event: BetPlaced): void {
   bet.match = matchId
   bet.amount = event.params.amount
   bet.prediction = outcomeToString(event.params.prediction)
+  bet.result = "PENDING"
   bet.claimed = false
   bet.placedAt = event.block.timestamp
   bet.placedAtBlock = event.block.number
@@ -293,164 +260,134 @@ export function handleBetPlaced(event: BetPlaced): void {
 
 }
 
-// ============ Claim Handlers ============
+// ============ Settlement ============
 
-export function handleWinningsClaimed(event: WinningsClaimed): void {
-  let matchId = event.params.matchId.toString()
-  let match = Match.load(matchId)
+/**
+ * Settle every bet on a resolved match, mirroring the contract's payout rules:
+ * - nobody picked the winner  -> everyone is refunded (REFUND)
+ * - everyone picked the winner -> stake returned, no fee (WON, profit 0)
+ * - otherwise winners split totalPool - fee pro rata, others LOST
+ */
+function settleResolvedBets(
+  match: Match,
+  totalPool: BigInt,
+  winnerPool: BigInt,
+  platformFee: BigInt,
+  timestamp: BigInt
+): void {
+  let zero = BigInt.fromI32(0)
+  let one = BigInt.fromI32(1)
+  let bets = match.bets.load()
 
-  if (match == null) {
-    return
-  }
-
-  // Update bet
-  let betId = generateBetId(event.params.matchId, event.params.bettor)
-  let bet = Bet.load(betId)
-
-  if (bet != null) {
-    bet.claimed = true
-    bet.payout = event.params.amount
-    bet.profit = event.params.profit
-    bet.claimedAt = event.block.timestamp
-    bet.save()
-  }
-
-  // Update user stats
-  let user = User.load(event.params.bettor.toHexString())
-
-  if (user != null) {
-    user.totalWon = user.totalWon.plus(event.params.amount)
-    user.totalClaimed = user.totalClaimed.plus(event.params.amount)
-    user.totalProfit = user.totalProfit.plus(event.params.profit)
-    user.lastActivityAt = event.block.timestamp
-
-    if (event.params.profit.gt(BigInt.fromI32(0))) {
-      user.winCount = user.winCount.plus(BigInt.fromI32(1))
-    } else {
-      user.lossCount = user.lossCount.plus(BigInt.fromI32(1))
+  for (let i = 0; i < bets.length; i++) {
+    let bet = bets[i]
+    if (bet.result != "PENDING") {
+      continue
     }
 
+    let user = User.load(bet.bettor)
+    if (user == null) {
+      continue
+    }
+
+    let payout = zero
+    if (winnerPool.equals(zero)) {
+      bet.result = "REFUND"
+      payout = bet.amount
+      user.refundCount = user.refundCount.plus(one)
+    } else if (bet.prediction == match.result) {
+      bet.result = "WON"
+      payout = winnerPool.equals(totalPool)
+        ? bet.amount
+        : bet.amount.times(totalPool.minus(platformFee)).div(winnerPool)
+      user.winCount = user.winCount.plus(one)
+      user.totalWon = user.totalWon.plus(payout)
+    } else {
+      bet.result = "LOST"
+      user.lossCount = user.lossCount.plus(one)
+    }
+
+    let profit = payout.minus(bet.amount)
+    bet.payout = payout
+    bet.profit = profit
+    bet.settledAt = timestamp
+    bet.save()
+
+    user.totalProfit = user.totalProfit.plus(profit)
+    user.lastActivityAt = timestamp
     user.save()
   }
+}
 
-  // Update match total claimed
-  match.totalClaimed = match.totalClaimed.plus(event.params.amount)
-  match.save()
+/**
+ * Mark every bet on a cancelled match as a full refund
+ */
+function settleCancelledBets(match: Match, timestamp: BigInt): void {
+  let bets = match.bets.load()
 
-  // Update global stats
-  let stats = getOrCreateGlobalStats()
-  stats.totalPayouts = stats.totalPayouts.plus(event.params.amount)
-  stats.lastUpdatedAt = event.block.timestamp
-  stats.save()
+  for (let i = 0; i < bets.length; i++) {
+    let bet = bets[i]
+    if (bet.result != "PENDING") {
+      continue
+    }
 
+    bet.result = "REFUND"
+    bet.payout = bet.amount
+    bet.profit = BigInt.fromI32(0)
+    bet.settledAt = timestamp
+    bet.save()
+
+    let user = User.load(bet.bettor)
+    if (user != null) {
+      user.refundCount = user.refundCount.plus(BigInt.fromI32(1))
+      user.save()
+    }
+  }
+}
+
+// ============ Claim Handlers ============
+// Batch claims emit WinningsClaimed / RefundClaimed per match as well, so the
+// BatchWinningsClaimed / BatchRefundsClaimed events are intentionally not indexed.
+
+export function handleWinningsClaimed(event: WinningsClaimed): void {
+  recordClaim(event.params.matchId, event.params.bettor, event.params.amount, event.block.timestamp)
 }
 
 export function handleRefundClaimed(event: RefundClaimed): void {
-  let matchId = event.params.matchId.toString()
-  let match = Match.load(matchId)
+  recordClaim(event.params.matchId, event.params.bettor, event.params.amount, event.block.timestamp)
+}
+
+function recordClaim(matchIdParam: BigInt, bettor: Address, amount: BigInt, timestamp: BigInt): void {
+  let match = Match.load(matchIdParam.toString())
 
   if (match == null) {
     return
   }
 
-  // Update bet
-  let betId = generateBetId(event.params.matchId, event.params.bettor)
-  let bet = Bet.load(betId)
+  let bet = Bet.load(generateBetId(matchIdParam, bettor))
 
   if (bet != null) {
     bet.claimed = true
-    bet.payout = event.params.amount
-    bet.profit = BigInt.fromI32(0) // Refunds don't have profit
-    bet.claimedAt = event.block.timestamp
+    bet.payout = amount
+    bet.profit = amount.minus(bet.amount)
+    bet.claimedAt = timestamp
     bet.save()
   }
 
-  // Update user stats
-  let user = User.load(event.params.bettor.toHexString())
+  let user = User.load(bettor.toHexString())
 
   if (user != null) {
-    user.totalClaimed = user.totalClaimed.plus(event.params.amount)
-    user.refundCount = user.refundCount.plus(BigInt.fromI32(1))
-    user.lastActivityAt = event.block.timestamp
+    user.totalClaimed = user.totalClaimed.plus(amount)
+    user.lastActivityAt = timestamp
     user.save()
   }
 
-  // Update match total claimed
-  match.totalClaimed = match.totalClaimed.plus(event.params.amount)
+  match.totalClaimed = match.totalClaimed.plus(amount)
   match.save()
 
-  // Update global stats
   let stats = getOrCreateGlobalStats()
-  stats.totalPayouts = stats.totalPayouts.plus(event.params.amount)
-  stats.lastUpdatedAt = event.block.timestamp
-  stats.save()
-}
-
-export function handleBatchWinningsClaimed(event: BatchWinningsClaimed): void {
-  let matchIds = event.params.matchIds
-  let user = User.load(event.params.user.toHexString())
-
-  if (user == null) {
-    return
-  }
-
-  // Update user stats
-  user.totalClaimed = user.totalClaimed.plus(event.params.totalPayout)
-  user.lastActivityAt = event.block.timestamp
-  user.save()
-
-  // Update each match and bet
-  for (let i = 0; i < matchIds.length; i++) {
-    let matchId = matchIds[i].toString()
-    let betId = generateBetId(matchIds[i], event.params.user)
-    let bet = Bet.load(betId)
-
-    if (bet != null && !bet.claimed) {
-      bet.claimed = true
-      bet.claimedAt = event.block.timestamp
-      // Note: Individual payout amounts not available in batch event
-      bet.save()
-    }
-  }
-
-  // Update global stats
-  let stats = getOrCreateGlobalStats()
-  stats.totalPayouts = stats.totalPayouts.plus(event.params.totalPayout)
-  stats.lastUpdatedAt = event.block.timestamp
-  stats.save()
-}
-
-export function handleBatchRefundsClaimed(event: BatchRefundsClaimed): void {
-  let matchIds = event.params.matchIds
-  let user = User.load(event.params.user.toHexString())
-
-  if (user == null) {
-    return
-  }
-
-  // Update user stats
-  user.totalClaimed = user.totalClaimed.plus(event.params.totalRefund)
-  user.refundCount = user.refundCount.plus(BigInt.fromI32(matchIds.length))
-  user.lastActivityAt = event.block.timestamp
-  user.save()
-
-  // Update each bet
-  for (let i = 0; i < matchIds.length; i++) {
-    let betId = generateBetId(matchIds[i], event.params.user)
-    let bet = Bet.load(betId)
-
-    if (bet != null && !bet.claimed) {
-      bet.claimed = true
-      bet.claimedAt = event.block.timestamp
-      bet.profit = BigInt.fromI32(0)
-      bet.save()
-    }
-  }
-
-  // Update global stats
-  let stats = getOrCreateGlobalStats()
-  stats.totalPayouts = stats.totalPayouts.plus(event.params.totalRefund)
-  stats.lastUpdatedAt = event.block.timestamp
+  stats.totalPayouts = stats.totalPayouts.plus(amount)
+  stats.lastUpdatedAt = timestamp
   stats.save()
 }
 

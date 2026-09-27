@@ -1,14 +1,14 @@
 {
-  "name": "matchdaybet-v2",
+  "name": "matchdaybet-v-2",
   "license": "UNLICENSED",
   "scripts": {
     "codegen": "graph codegen",
     "build": "graph build",
-    "deploy": "graph deploy --node https://api.studio.thegraph.com/deploy/ matchdaybet-v2",
+    "deploy": "graph deploy --node https://api.studio.thegraph.com/deploy/ matchdaybet-v-2",
     "create-local": "graph create --node http://localhost:8020/ matchdaybet-v2",
     "remove-local": "graph remove --node http://localhost:8020/ matchdaybet-v2",
     "deploy-local": "graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 matchdaybet-v2",
-    "test": "graph test"
+    "test": "graph test -v 0.6.0"
   },
   "dependencies": {
     "@graphprotocol/graph-cli": "0.98.1",

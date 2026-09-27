@@ -5,6 +5,25 @@
 > **Subgraph Version:** Updated for V3 compatibility
 > **Deployment:** Pending (ready to deploy)
 
+
+## Accounting fixes (September 2026)
+
+Re-deploy as a new version; the subgraph must re-index from `startBlock` for the fixes to apply to history.
+
+- **Batch resolve/cancel no longer mutate matches.** Every contract version emits `MatchResolved` / `MatchCancelled`
+  per match inside batch calls, and the `BatchMatches*` events list skipped matches too. Their handlers
+  double-counted `activeMatches` / `resolvedMatches` and could overwrite a result or mark a resolved match
+  cancelled. They are no longer indexed (the V3 `*Summary` events still are).
+- **Batch claims no longer double count.** `batchClaimWinnings` / `batchClaimRefunds` emit a per-match
+  `WinningsClaimed` / `RefundClaimed`, so `BatchWinningsClaimed` / `BatchRefundsClaimed` are no longer indexed.
+- **Bets settle at resolution, not at claim.** New `Bet.result` (`PENDING | WON | LOST | REFUND`) and
+  `Bet.settledAt`; `payout` / `profit` are set using the contract's payout formula (`profit` is negative for losses).
+  `User.winCount`, `lossCount`, `refundCount`, `totalWon` and `totalProfit` update at settlement, so losers
+  (who never claim) are counted. `totalClaimed` still tracks withdrawals.
+- **New `Match.winnerPool`.**
+- `networks.json` keyed by the `MatchDayBet` data source; deploy script targets the `matchdaybet-v-2` Studio slug;
+  `yarn test` pins Matchstick 0.6.0 and has tests for all of the above.
+
 ## Overview
 
 This document details the changes made to the MatchDayBet subgraph to support V3 contract features. The subgraph has been updated to track V3's idempotent batch operations and configurable grace period while maintaining full backward compatibility with V2 events.

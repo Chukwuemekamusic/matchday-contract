@@ -1,4 +1,4 @@
-# MatchDayBet V2 Subgraph Schema
+# MatchDayBet Subgraph Schema (V1-V3 contract events)
 
 # Enums
 enum MatchStatus {
@@ -13,6 +13,16 @@ enum Outcome {
   HOME
   DRAW
   AWAY
+}
+
+"""
+Settlement state of a single bet, set when its match is resolved or cancelled
+"""
+enum BetResult {
+  PENDING # match not settled yet
+  WON # picked the winning outcome (payout may equal stake when everyone picked it)
+  LOST # picked a losing outcome while someone picked the winner
+  REFUND # match cancelled, or nobody picked the winning outcome
 }
 
 enum SkipReason {
@@ -56,6 +66,7 @@ type Match @entity(immutable: false) {
   # Status
   status: MatchStatus!
   result: Outcome!
+  winnerPool: BigInt! # pool of the winning outcome, set on resolution
   platformFeeAmount: BigInt!
 
   # Timestamps
@@ -87,15 +98,17 @@ type Bet @entity(immutable: false) {
   bettor: User!
   amount: BigInt!
   prediction: Outcome!
+  result: BetResult!
   claimed: Boolean!
 
-  # Calculated when claimed
-  payout: BigInt
-  profit: BigInt # payout - amount (can be 0 for refunds)
+  # Set when the match settles (same formula as the contract's payout)
+  payout: BigInt # amount the bettor can claim (0 for LOST)
+  profit: BigInt # payout - amount (negative for LOST, 0 for REFUND)
 
   # Timestamps
   placedAt: BigInt!
   placedAtBlock: BigInt!
+  settledAt: BigInt
   claimedAt: BigInt
 
   # Transaction reference
@@ -112,11 +125,11 @@ type User @entity(immutable: false) {
   # Betting statistics
   totalBets: BigInt!
   totalWagered: BigInt!
-  totalWon: BigInt!
-  totalClaimed: BigInt!
-  totalProfit: BigInt! # Can be negative
+  totalWon: BigInt! # Gross payout of WON bets (claimed or not)
+  totalClaimed: BigInt! # Winnings + refunds actually withdrawn
+  totalProfit: BigInt! # Net result of settled bets, can be negative
 
-  # Win/loss record
+  # Win/loss record (counted at settlement, not at claim)
   winCount: BigInt!
   lossCount: BigInt!
   refundCount: BigInt!

@@ -1,6 +1,6 @@
 {
   "base": {
-    "MatchDayBetV2": {
+    "MatchDayBet": {
       "address": "0x1b048C7323C7c7FE910a5F0e08B36b0c715e8947",
       "startBlock": 40551839
     }
