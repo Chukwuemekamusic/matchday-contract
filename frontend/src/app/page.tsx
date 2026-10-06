@@ -11,7 +11,10 @@ export default async function Home() {
   try {
     fixtures = await listFixtures();
   } catch (err) {
-    console.error("[home] failed to load fixtures", err);
+    console.error("[home] failed to load fixtures", {
+      error: err instanceof Error ? err.message : String(err),
+      cause: err instanceof Error && err.cause instanceof Error ? err.cause.message : undefined,
+    });
     loadError = true;
   }
 

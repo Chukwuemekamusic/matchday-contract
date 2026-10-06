@@ -173,20 +173,28 @@ function BetSlip({
 
   const payout = side && amount ? estimatePayout(pools, side, amount, feeBps) : 0n;
   const busy = state.status === "working";
+  const canRetry = state.status === "error" && matchId === null;
 
   async function placeBet() {
     if (!side || !amount) return;
     let id = matchId;
     if (id === null) {
       setState({ status: "working", label: "Opening this match on-chain (first bet)…" });
-      const res = await fetch("/api/matches/ensure", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fixtureId }),
-      });
+      let res: Response;
+      try {
+        res = await fetch("/api/matches/ensure", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fixtureId }),
+        });
+      } catch {
+        setState({ status: "error", message: "Network error — tap Retry to try again." });
+        return;
+      }
       const body = (await res.json().catch(() => ({}))) as { matchId?: number; error?: string };
       if (!res.ok || body.matchId === undefined) {
-        setState({ status: "error", message: body.error ?? "Could not open this match for betting." });
+        const base = body.error ?? "Could not open this match for betting.";
+        setState({ status: "error", message: res.status >= 500 ? `${base} Tap Retry to try again.` : base });
         return;
       }
       id = body.matchId;
@@ -264,7 +272,13 @@ function BetSlip({
           disabled={!side || !amount || Boolean(problem) || busy}
           className="w-full rounded-lg bg-accent px-4 py-3 font-semibold text-white hover:bg-accent-strong disabled:opacity-50"
         >
-          {busy ? "Working…" : side ? `Bet on ${pickLabel(side, home, away)}` : "Choose an outcome"}
+          {busy
+            ? "Working…"
+            : canRetry
+              ? `Retry${side ? ` — Bet on ${pickLabel(side, home, away)}` : ""}`
+              : side
+                ? `Bet on ${pickLabel(side, home, away)}`
+                : "Choose an outcome"}
         </button>
       </ChainGate>
       <TxStatus state={state} doneText="Bet placed!" />

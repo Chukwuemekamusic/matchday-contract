@@ -1,4 +1,5 @@
 import "server-only";
+import { keeperEnv } from "../env";
 import type { ApiScore } from "./result";
 
 const BASE_URL = "https://api.football-data.org/v4";
@@ -27,11 +28,8 @@ export interface ApiMatch {
 }
 
 async function request<T>(path: string): Promise<T> {
-  const token = process.env.FOOTBALL_DATA_API_KEY;
-  if (!token) throw new Error("FOOTBALL_DATA_API_KEY is not set");
-
   const res = await fetch(`${BASE_URL}${path}`, {
-    headers: { "X-Auth-Token": token },
+    headers: { "X-Auth-Token": keeperEnv().FOOTBALL_DATA_API_KEY },
     cache: "no-store",
   });
   if (!res.ok) {
