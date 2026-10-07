@@ -26,6 +26,10 @@ const emptyToUndefined = z.literal("").transform(() => undefined);
 const alertSchema = z.object({
   // Discord or Slack incoming webhook; alerts are skipped when unset
   ALERT_WEBHOOK_URL: z.string().url().optional().or(emptyToUndefined),
+  // Telegram bot token from @BotFather; takes precedence over ALERT_WEBHOOK_URL when both are set
+  TELEGRAM_BOT_TOKEN: z.string().min(1).optional().or(emptyToUndefined),
+  // Target chat id — personal (positive) or group/channel (usually negative)
+  TELEGRAM_CHAT_ID: z.string().min(1).optional().or(emptyToUndefined),
   // Alert when the keeper wallet holds less than this (ETH)
   KEEPER_MIN_BALANCE_ETH: z
     .string()

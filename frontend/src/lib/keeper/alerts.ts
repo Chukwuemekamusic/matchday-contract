@@ -15,7 +15,7 @@ interface AlertRow {
 const icon = (severity: string) => (severity === "critical" ? "🔴" : "🟡");
 
 /** Discord reads `content`, Slack reads `text`; each ignores the other */
-async function postWebhook(url: string, message: string) {
+async function postIncomingWebhook(url: string, message: string) {
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -25,14 +25,34 @@ async function postWebhook(url: string, message: string) {
   if (!res.ok) throw new Error(`Alert webhook failed: ${res.status} ${await res.text()}`);
 }
 
+async function postTelegram(token: string, chatId: string, message: string) {
+  const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: chatId, text: message, disable_web_page_preview: true }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok) throw new Error(`Telegram alert failed: ${res.status} ${await res.text()}`);
+}
+
+async function sendAlert(message: string, env: ReturnType<typeof alertEnv>) {
+  if (env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID) {
+    await postTelegram(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_CHAT_ID, message);
+  } else if (env.ALERT_WEBHOOK_URL) {
+    await postIncomingWebhook(env.ALERT_WEBHOOK_URL, message);
+  }
+}
+
 /**
  * Check health and post new, repeating (every ALERT_REPEAT_HOURS) and resolved problems to
  * ALERT_WEBHOOK_URL. Called after each resolve run. If pg_cron itself stops, nothing calls
  * this — that case is covered by an uptime monitor on /api/health.
  */
 export async function sendHealthAlerts() {
-  const { ALERT_WEBHOOK_URL, ALERT_REPEAT_HOURS } = alertEnv();
-  if (!ALERT_WEBHOOK_URL) return { sent: 0, skipped: "ALERT_WEBHOOK_URL not set" };
+  const env = alertEnv();
+  const { ALERT_REPEAT_HOURS } = env;
+  const hasTransport = (env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID) || env.ALERT_WEBHOOK_URL;
+  if (!hasTransport) return { sent: 0, skipped: "no alert transport configured" };
 
   const report = await checkHealth();
   const { data, error } = await db().from("alert_log").select("key, severity, message, last_sent_at");
@@ -54,7 +74,7 @@ export async function sendHealthAlerts() {
     ...due.map((i) => `${icon(i.severity)} ${i.message}${i.detail ? ` — ${i.detail}` : ""}`),
     ...resolved.map((r) => `✅ Resolved: ${r.message}`),
   ];
-  await postWebhook(ALERT_WEBHOOK_URL, [`**MatchDay keeper**`, ...lines, `${siteUrl().origin}/admin`].join("\n"));
+  await sendAlert([`MatchDay keeper`, ...lines, `${siteUrl().origin}/admin`].join("\n"), env);
 
   // Only record after a successful post, so a failed webhook is retried next run
   if (due.length) {
