@@ -173,12 +173,15 @@ function BetSlip({
 
   const payout = side && amount ? estimatePayout(pools, side, amount, feeBps) : 0n;
   const busy = state.status === "working";
-  const canRetry = state.status === "error" && matchId === null;
+  // Only transient failures (network, server errors) are worth retrying; e.g. "betting closed" is final
+  const [retryable, setRetryable] = useState(false);
+  const canRetry = retryable && state.status === "error" && matchId === null;
 
   async function placeBet() {
     if (!side || !amount) return;
     let id = matchId;
     if (id === null) {
+      setRetryable(false);
       setState({ status: "working", label: "Opening this match on-chain (first bet)…" });
       let res: Response;
       try {
@@ -188,13 +191,16 @@ function BetSlip({
           body: JSON.stringify({ fixtureId }),
         });
       } catch {
+        setRetryable(true);
         setState({ status: "error", message: "Network error — tap Retry to try again." });
         return;
       }
       const body = (await res.json().catch(() => ({}))) as { matchId?: number; error?: string };
       if (!res.ok || body.matchId === undefined) {
         const base = body.error ?? "Could not open this match for betting.";
-        setState({ status: "error", message: res.status >= 500 ? `${base} Tap Retry to try again.` : base });
+        const transient = res.status >= 500 || res.status === 409; // 409: creation still in flight
+        setRetryable(transient);
+        setState({ status: "error", message: transient ? `${base} Tap Retry to try again.` : base });
         return;
       }
       id = body.matchId;

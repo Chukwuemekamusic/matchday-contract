@@ -37,6 +37,16 @@ Browser ──wagmi/viem──▶ MatchDayBet (Base)          ◀── keeper w
 
 Keeper runs are logged in the `keeper_runs` table; pg_cron history is in `cron.job_run_details`.
 
+## Monitoring
+
+- `GET /api/health` checks the keeper wallet balance, that the resolve job ran in the last 30 min and the fixture
+  sync in the last 13 h, matches overdue for settlement (6 h warn, 24 h critical), and stuck or failed match
+  creations. It returns **503 when anything is critical** — point a free uptime monitor (UptimeRobot,
+  Better Stack, …) at it. That's what catches pg_cron stopping, since nothing else would run.
+- Set `ALERT_WEBHOOK_URL` (Discord or Slack) to get each problem pushed after resolve runs, repeated at most every
+  `ALERT_REPEAT_HOURS`, plus a ✅ when it clears. Run `supabase/migrations/0002_alerts.sql` first.
+- `/admin?token=<KEEPER_CRON_SECRET>` shows the same checks with details, recent runs and failed creations.
+
 ## Development
 
 ```bash
@@ -48,6 +58,9 @@ npm run typecheck
 npm run lint
 npm run sync-abi  # after the contract ABI changes (reads ../subgraph/abis/MatchDayBet.json)
 ```
+
+The app is installable (web manifest + generated icons in `src/app/icon.tsx`); phones get a dismissible
+"add to home screen" card.
 
 Pages: `/` fixtures (grouped by day, local time), `/match/[fixtureId]`, `/me` (bets + claim all),
 `/leaderboard` (subgraph, cached 60s), `/how-it-works`. Match pages have generated share images

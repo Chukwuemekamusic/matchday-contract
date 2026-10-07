@@ -1,6 +1,7 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import { ConnectWallet } from "@/components/ConnectWallet";
+import { InstallPrompt } from "@/components/InstallPrompt";
 import { NavLinks } from "@/components/NavLinks";
 import { contractAddress, chain } from "@/lib/contract/config";
 import { siteUrl } from "@/lib/site";
@@ -15,6 +16,14 @@ export const metadata: Metadata = {
   description,
   openGraph: { siteName: "MatchDay", type: "website", description },
   twitter: { card: "summary_large_image" },
+  appleWebApp: { capable: true, title: "MatchDay", statusBarStyle: "default" },
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f6f7f5" },
+    { media: "(prefers-color-scheme: dark)", color: "#0d110e" },
+  ],
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -48,6 +57,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               . Results from football-data.org, settled on the 90-minute score. Bet responsibly.
             </p>
           </footer>
+          <InstallPrompt />
         </Providers>
       </body>
     </html>
