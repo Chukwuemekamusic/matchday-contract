@@ -107,15 +107,19 @@ export function FixtureList({ fixtures, serverNow, initialRound, initialCompetit
   );
   const competitions = useMemo(() => {
     const seen = new Map<string, string>();
-    inRound.forEach((f) => seen.set(f.competition_code, f.competition_name));
+    fixtures.forEach((f) => seen.set(f.competition_code, f.competition_name));
     return [...seen.entries()];
-  }, [inRound]);
+  }, [fixtures]);
+  const availableCodes = useMemo(() => new Set(inRound.map((f) => f.competition_code)), [inRound]);
+  // If the chosen competition has no fixtures in this round, display falls back to "all" —
+  // the stored selection is preserved so switching back to a round that has it re-activates the filter.
+  const effectiveCompetition = competition === "all" || availableCodes.has(competition) ? competition : "all";
 
   // Day → competition → fixtures, in kickoff order
   const days = useMemo(() => {
     const out: { key: string; label: string; groups: { code: string; name: string; fixtures: FixtureView[] }[] }[] = [];
     for (const f of inRound) {
-      if (competition !== "all" && f.competition_code !== competition) continue;
+      if (effectiveCompetition !== "all" && f.competition_code !== effectiveCompetition) continue;
       const kickoff = new Date(f.kickoff_at);
       const key = localDayKey(kickoff);
       let day = out.find((d) => d.key === key);
@@ -125,7 +129,7 @@ export function FixtureList({ fixtures, serverNow, initialRound, initialCompetit
       group.fixtures.push(f);
     }
     return out;
-  }, [inRound, competition, now]);
+  }, [inRound, effectiveCompetition, now]);
 
   if (!hydrated) {
     return (
@@ -176,18 +180,28 @@ export function FixtureList({ fixtures, serverNow, initialRound, initialCompetit
 
       {competitions.length > 1 && (
         <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 text-sm">
-          {[["all", "All"] as const, ...competitions].map(([code, name]) => (
-            <button
-              key={code}
-              onClick={() => select({ competition: code })}
-              aria-pressed={competition === code}
-              className={`shrink-0 rounded-full px-3 py-1 ${
-                competition === code ? "bg-foreground text-background" : "bg-surface-muted text-muted hover:text-foreground"
-              }`}
-            >
-              {name}
-            </button>
-          ))}
+          {[["all", "All"] as const, ...competitions].map(([code, name]) => {
+            const unavailable = code !== "all" && !availableCodes.has(code);
+            const active = effectiveCompetition === code;
+            return (
+              <button
+                key={code}
+                onClick={() => select({ competition: code })}
+                aria-pressed={active}
+                disabled={unavailable}
+                title={unavailable ? "No matches in this round" : undefined}
+                className={`shrink-0 rounded-full px-3 py-1 ${
+                  active
+                    ? "bg-foreground text-background"
+                    : unavailable
+                      ? "cursor-not-allowed bg-surface-muted/50 text-muted/50"
+                      : "bg-surface-muted text-muted hover:text-foreground"
+                }`}
+              >
+                {name}
+              </button>
+            );
+          })}
         </div>
       )}
 
