@@ -62,7 +62,7 @@ npm run sync-abi  # after the contract ABI changes (reads ../subgraph/abis/Match
 The app is installable (web manifest + generated icons in `src/app/icon.tsx`); phones get a dismissible
 "add to home screen" card.
 
-Pages: `/` fixtures (grouped by day, local time), `/match/[fixtureId]`, `/me` (bets + claim all),
+Pages: `/` fixtures in weekend (Fri–Mon) / midweek (Tue–Thu) rounds, by day then competition, in local time, `/match/[fixtureId]`, `/me` (bets + claim all),
 `/leaderboard` (subgraph, cached 60s), `/how-it-works`. Match pages have generated share images
 (`opengraph-image.tsx`); set `NEXT_PUBLIC_SITE_URL` if the app isn't on its Vercel production URL.
 

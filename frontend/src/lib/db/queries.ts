@@ -25,8 +25,8 @@ function withMatchIds(rows: FixtureRow[], ids: Map<number, number>): FixtureView
   return rows.map((f) => ({ ...f, onchain_match_id: ids.get(f.id) ?? null }));
 }
 
-/** Fixtures from `hoursBack` ago up to `daysAhead` days out, ordered by kickoff */
-export async function listFixtures(hoursBack = 48, daysAhead = 15): Promise<FixtureView[]> {
+/** Fixtures from `hoursBack` ago (covers last weekend and midweek) up to `daysAhead` days out, by kickoff */
+export async function listFixtures(hoursBack = 9 * 24, daysAhead = 15): Promise<FixtureView[]> {
   const from = new Date(Date.now() - hoursBack * 3600_000).toISOString();
   const to = new Date(Date.now() + daysAhead * 86400_000).toISOString();
 

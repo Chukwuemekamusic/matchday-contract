@@ -5,7 +5,9 @@ import type { FixtureView } from "@/lib/db/types";
 
 export const dynamic = "force-dynamic";
 
-export default async function Home() {
+export default async function Home({ searchParams }: PageProps<"/">) {
+  const params = await searchParams;
+  const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
   let fixtures: FixtureView[] = [];
   let loadError = false;
   try {
@@ -33,7 +35,12 @@ export default async function Home() {
           Fixtures are unavailable right now. Please try again shortly.
         </p>
       ) : (
-        <FixtureList fixtures={fixtures} serverNow={requestTime()} />
+        <FixtureList
+          fixtures={fixtures}
+          serverNow={requestTime()}
+          initialRound={first(params.round)}
+          initialCompetition={first(params.c)}
+        />
       )}
     </div>
   );

@@ -1,15 +1,26 @@
 import type { FixtureView } from "./db/types";
 
-export type FixtureBucket = "upcoming" | "live" | "results";
+export type FixtureState =
+  | "open" // taking bets
+  | "closing" // kicks off within 3 minutes; no longer taking bets
+  | "live" // in play (or just kicked off)
+  | "ended" // should be over but the final score hasn't synced yet
+  | "finished"
+  | "postponed"
+  | "cancelled";
 
 const LIVE_STATUSES = new Set(["IN_PLAY", "PAUSED", "LIVE", "EXTRA_TIME", "PENALTY_SHOOTOUT", "SUSPENDED"]);
-const DONE_STATUSES = new Set(["FINISHED", "AWARDED", "POSTPONED", "CANCELLED"]);
+/** A match is assumed over this long after kickoff even if the status hasn't synced */
+const MATCH_LENGTH_MS = 2.5 * 3600_000;
 
-/** Which tab a fixture belongs in */
-export function fixtureBucket(f: Pick<FixtureView, "status" | "kickoff_at">, nowMs: number): FixtureBucket {
-  if (DONE_STATUSES.has(f.status)) return "results";
-  if (LIVE_STATUSES.has(f.status) || new Date(f.kickoff_at).getTime() <= nowMs) return "live";
-  return "upcoming";
+export function fixtureState(f: Pick<FixtureView, "status" | "kickoff_at">, nowMs: number): FixtureState {
+  if (f.status === "FINISHED") return "finished";
+  if (f.status === "POSTPONED") return "postponed";
+  if (f.status === "CANCELLED" || f.status === "AWARDED") return "cancelled";
+  const sinceKickoff = nowMs - new Date(f.kickoff_at).getTime();
+  if (LIVE_STATUSES.has(f.status)) return "live";
+  if (sinceKickoff >= 0) return sinceKickoff < MATCH_LENGTH_MS ? "live" : "ended";
+  return fixtureAcceptsBets(f, nowMs) ? "open" : "closing";
 }
 
 /** Bets close at kickoff; the server refuses to create matches with less than 3 minutes to go */
