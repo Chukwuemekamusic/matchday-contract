@@ -130,3 +130,35 @@ export async function fetchMatchBets(matchId: number): Promise<MatchBet[]> {
     placedAt: new Date(Number(b.placedAt) * 1000),
   }));
 }
+
+const USERS = /* GraphQL */ `
+  query Users($ids: [ID!]!) {
+    users(where: { id_in: $ids }) {
+      id
+      totalBets
+      winCount
+      lossCount
+      refundCount
+    }
+  }
+`;
+
+/** ETH betting record (counts only, no amounts) across a set of wallets */
+export async function fetchBettingRecord(addresses: string[]) {
+  const empty = { bets: 0, won: 0, lost: 0, refunded: 0 };
+  if (addresses.length === 0) return empty;
+  const data = await query<{ users: { totalBets: string; winCount: string; lossCount: string; refundCount: string }[] }>(
+    USERS,
+    { ids: addresses.map((a) => a.toLowerCase()) },
+    { next: { revalidate: 60 } },
+  );
+  return data.users.reduce(
+    (acc, u) => ({
+      bets: acc.bets + Number(u.totalBets),
+      won: acc.won + Number(u.winCount),
+      lost: acc.lost + Number(u.lossCount),
+      refunded: acc.refunded + Number(u.refundCount),
+    }),
+    empty,
+  );
+}

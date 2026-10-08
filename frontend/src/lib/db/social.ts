@@ -81,3 +81,46 @@ export async function pointsTable(opts: { since?: Date; groupId?: string; limit?
     won: Number(r.won),
   }));
 }
+
+export async function profileByUsername(username: string): Promise<(Profile & { created_at: string }) | null> {
+  const { data, error } = await db()
+    .from("profiles")
+    .select("id, username, display_name, avatar_url, created_at")
+    .eq("username", username.toLowerCase())
+    .maybeSingle();
+  if (error) throw error;
+  return data as (Profile & { created_at: string }) | null;
+}
+
+export async function walletsOf(userId: string): Promise<string[]> {
+  const { data, error } = await db().from("wallets").select("address").eq("user_id", userId);
+  if (error) throw error;
+  return (data ?? []).map((w) => w.address as string);
+}
+
+export interface PickWithFixture extends PickRow {
+  fixtures: {
+    home_team: string;
+    away_team: string;
+    home_short: string | null;
+    away_short: string | null;
+    kickoff_at: string;
+    competition_name: string;
+    home_score: number | null;
+    away_score: number | null;
+  };
+}
+
+const PICK_WITH_FIXTURE =
+  "*, fixtures!inner(home_team, away_team, home_short, away_short, kickoff_at, competition_name, home_score, away_score)";
+
+/** A user's most recently made picks with their fixtures, returned newest kickoff first */
+export async function picksOf(userId: string, opts: { settledOnly?: boolean; limit?: number } = {}): Promise<PickWithFixture[]> {
+  let q = db().from("picks").select(PICK_WITH_FIXTURE).eq("user_id", userId);
+  if (opts.settledOnly) q = q.not("settled_at", "is", null);
+  const { data, error } = await q.order("updated_at", { ascending: false }).limit(opts.limit ?? 1000);
+  if (error) throw error;
+  return ((data ?? []) as PickWithFixture[]).sort(
+    (a, b) => new Date(b.fixtures.kickoff_at).getTime() - new Date(a.fixtures.kickoff_at).getTime(),
+  );
+}

@@ -1,5 +1,8 @@
+import Link from "next/link";
+import { Avatar } from "@/components/Avatar";
 import { YouBadge } from "@/components/YouBadge";
-import { chain } from "@/lib/contract/config";
+import type { Profile } from "@/lib/auth/types";
+import { profilesForWallets } from "@/lib/db/activity";
 import { formatEth, shortAddress } from "@/lib/format";
 import { fetchLeaderboard, type LeaderboardEntry, type LeaderboardSort } from "@/lib/subgraph";
 
@@ -14,7 +17,8 @@ export async function EthLeaderboard({ sort }: { sort: LeaderboardSort }) {
     failed = true;
   }
 
-  const explorer = chain.blockExplorers?.default.url ?? "https://basescan.org";
+  // Wallets linked to profiles show as people
+  const owners = await profilesForWallets(entries.map((e) => e.id)).catch(() => new Map<string, Profile>());
 
   return (
     <>
@@ -43,13 +47,21 @@ export async function EthLeaderboard({ sort }: { sort: LeaderboardSort }) {
                 const wins = Number(e.winCount);
                 const decided = wins + Number(e.lossCount);
                 const profit = BigInt(e.totalProfit);
+                const owner = owners.get(e.id);
                 return (
                   <tr key={e.id}>
                     <td className="px-4 py-3 font-mono text-muted">{i + 1}</td>
                     <td className="px-4 py-3">
-                      <a href={`${explorer}/address/${e.id}`} target="_blank" rel="noreferrer" className="font-mono hover:underline">
-                        {shortAddress(e.id)}
-                      </a>
+                      {owner ? (
+                        <Link href={`/u/${owner.username}`} className="inline-flex items-center gap-2 hover:underline">
+                          <Avatar name={owner.display_name} seed={owner.id} src={owner.avatar_url} size={22} />
+                          <span className="font-medium">{owner.display_name}</span>
+                        </Link>
+                      ) : (
+                        <Link href={`/u/${e.id}`} className="font-mono hover:underline">
+                          {shortAddress(e.id)}
+                        </Link>
+                      )}
                       <YouBadge address={e.id} />
                     </td>
                     <td className="px-4 py-3 text-right font-mono">{e.totalBets}</td>
