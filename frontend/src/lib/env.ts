@@ -41,6 +41,16 @@ const alertSchema = z.object({
   ALERT_REPEAT_HOURS: z.coerce.number().positive().optional().or(emptyToUndefined).transform((v) => v ?? 6),
 });
 
+const channelSchema = z.object({
+  TELEGRAM_BOT_TOKEN: z.string().optional().or(emptyToUndefined),
+  // Public channel (e.g. @matchday_fc or -100…); the bot must be an admin. Posting is off when unset.
+  TELEGRAM_CHANNEL_ID: z.string().optional().or(emptyToUndefined),
+  // Time zone for kickoff times in channel posts
+  CHANNEL_TIMEZONE: z.string().optional().or(emptyToUndefined).transform((v) => v ?? "Africa/Lagos"),
+  // Only post results for matches with at least this many picks
+  CHANNEL_MIN_PICKS: z.coerce.number().int().positive().optional().or(emptyToUndefined).transform((v) => v ?? 3),
+});
+
 const authSchema = z.object({
   // Supabase Auth (the dashboard's "Connect" values). The publishable key is public by design.
   NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
@@ -63,6 +73,7 @@ let supabase: z.infer<typeof supabaseSchema> | undefined;
 let keeper: z.infer<typeof keeperSchema> | undefined;
 let alert: z.infer<typeof alertSchema> | undefined;
 let auth: z.infer<typeof authSchema> | undefined;
+let channel: z.infer<typeof channelSchema> | undefined;
 
 export function supabaseEnv() {
   if (!supabase) supabase = parse(supabaseSchema, "Supabase");
@@ -88,4 +99,9 @@ export function authEnv() {
     });
   }
   return auth;
+}
+
+export function channelEnv() {
+  if (!channel) channel = parse(channelSchema, "channel");
+  return channel;
 }

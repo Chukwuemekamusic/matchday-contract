@@ -56,7 +56,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               <a className="underline" href={`${explorer}/address/${contractAddress}`} target="_blank" rel="noreferrer">
                 {contractAddress.slice(0, 6)}…{contractAddress.slice(-4)}
               </a>
-              . Results from football-data.org, settled on the 90-minute score. Bet responsibly.
+              . Results from football-data.org, settled on the 90-minute score.{" "}
+              <Link href="/how-it-works" className="underline">
+                How it works
+              </Link>
+              . 18+, play responsibly.
             </p>
           </footer>
           <InstallPrompt />

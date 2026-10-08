@@ -1,4 +1,5 @@
 import { sendHealthAlerts } from "@/lib/keeper/alerts";
+import { postRecapIfDue, postResults } from "@/lib/keeper/channel";
 import { isKeeperRequest } from "@/lib/keeper/auth";
 import { resolveMatches } from "@/lib/keeper/resolve";
 import { recordRun } from "@/lib/keeper/runs";
@@ -23,8 +24,15 @@ export async function POST(request: Request) {
       console.error("[keeper/settle-picks]", err);
       return { error: "settle-picks failed" };
     });
+    const channel = await recordRun("channel", async () => ({
+      results: await postResults(),
+      recap: await postRecapIfDue(),
+    })).catch((err) => {
+      console.error("[keeper/channel]", err);
+      return { error: "channel posts failed" };
+    });
     await alertSafely();
-    return Response.json({ ...summary, picks });
+    return Response.json({ ...summary, picks, channel });
   } catch (err) {
     console.error("[keeper/resolve]", err);
     await alertSafely();

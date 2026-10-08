@@ -37,6 +37,29 @@ Browser ──wagmi/viem──▶ MatchDayBet (Base)          ◀── keeper w
 
 Keeper runs are logged in the `keeper_runs` table; pg_cron history is in `cron.job_run_details`.
 
+## Social layer: accounts, free picks, groups
+
+Run `supabase/migrations/0003_social.sql`, then in the Supabase dashboard:
+
+- **Auth → Providers → Google**: enable with a Google OAuth client; add
+  `https://YOUR-APP/auth/callback` to the redirect URLs (Auth → URL Configuration), plus `http://localhost:3000/auth/callback`.
+- **Email** magic links work out of the box (built-in mailer is rate limited; add SMTP for production).
+- **Telegram**: set `NEXT_PUBLIC_TELEGRAM_BOT_USERNAME` and `TELEGRAM_BOT_TOKEN`, and `/setdomain` in @BotFather.
+  `/auth/telegram` verifies the widget's signature and turns it into a Supabase session (synthetic
+  `telegram-<id>@telegram.example.com` user, created on first login).
+
+How it fits together:
+
+- **Free picks** (`picks`): signed-in users pick home/draw/away, changeable until kickoff. The resolve run settles
+  them from fixture results — 3 points for a correct result, +2 when under a third of 3+ pickers called it, void for
+  postponed/cancelled. Independent of the contract.
+- **Profiles** `/u/<username>` (style label, streak, head-to-head with the viewer); wallets are linked in Settings by
+  signing a message, so ETH bets show under the person. Stake amounts are never shown publicly.
+- **Pick cards** `/pick/<fixture>/<username>` with a generated preview image — what gets shared to WhatsApp/Telegram.
+- **Groups** with invite codes (`/join/<code>`) and members-only weekly/all-time tables.
+- **Telegram channel** (`TELEGRAM_CHANNEL_ID`): round digest from the fixture sync, results and Monday recap from the
+  resolve run, each posted once (`channel_posts`).
+
 ## Monitoring
 
 - `GET /api/health` checks the keeper wallet balance, that the resolve job ran in the last 30 min and the fixture
