@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
+import { AccountMenu } from "@/components/AccountMenu";
 import { ConnectWallet } from "@/components/ConnectWallet";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import { NavLinks } from "@/components/NavLinks";
@@ -39,8 +40,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
                 <span className="grid h-8 w-8 place-items-center rounded-full bg-accent text-sm text-white">⚽</span>
                 MatchDay
               </Link>
-              <div className="ml-auto sm:order-last">
+              <div className="ml-auto flex items-center gap-2 sm:order-last">
                 <ConnectWallet />
+                <AccountMenu />
               </div>
               <NavLinks />
             </div>

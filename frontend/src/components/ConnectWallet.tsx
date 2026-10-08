@@ -3,5 +3,12 @@
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 
 export function ConnectWallet() {
-  return <ConnectButton chainStatus="icon" showBalance={{ smallScreen: false, largeScreen: true }} accountStatus="address" />;
+  return (
+    <ConnectButton
+      label="Wallet"
+      chainStatus="icon"
+      showBalance={{ smallScreen: false, largeScreen: true }}
+      accountStatus={{ smallScreen: "avatar", largeScreen: "address" }}
+    />
+  );
 }

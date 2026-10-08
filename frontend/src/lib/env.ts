@@ -41,8 +41,17 @@ const alertSchema = z.object({
   ALERT_REPEAT_HOURS: z.coerce.number().positive().optional().or(emptyToUndefined).transform((v) => v ?? 6),
 });
 
-function parse<T>(schema: z.ZodType<T>, group: string): T {
-  const result = schema.safeParse(process.env);
+const authSchema = z.object({
+  // Supabase Auth (the dashboard's "Connect" values). The publishable key is public by design.
+  NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: z.string().min(1),
+  // Telegram login: the bot whose login widget is shown (set its domain with @BotFather /setdomain)
+  NEXT_PUBLIC_TELEGRAM_BOT_USERNAME: z.string().optional().or(emptyToUndefined),
+  TELEGRAM_BOT_TOKEN: z.string().optional().or(emptyToUndefined),
+});
+
+function parse<T>(schema: z.ZodType<T>, group: string, source: Record<string, string | undefined> = process.env): T {
+  const result = schema.safeParse(source);
   if (result.success) return result.data;
   const details = result.error.issues
     .map((i) => `  - ${i.path.join(".") || "(root)"}: ${i.message}`)
@@ -53,6 +62,7 @@ function parse<T>(schema: z.ZodType<T>, group: string): T {
 let supabase: z.infer<typeof supabaseSchema> | undefined;
 let keeper: z.infer<typeof keeperSchema> | undefined;
 let alert: z.infer<typeof alertSchema> | undefined;
+let auth: z.infer<typeof authSchema> | undefined;
 
 export function supabaseEnv() {
   if (!supabase) supabase = parse(supabaseSchema, "Supabase");
@@ -67,4 +77,15 @@ export function keeperEnv() {
 export function alertEnv() {
   if (!alert) alert = parse(alertSchema, "alert");
   return alert;
+}
+
+export function authEnv() {
+  if (!auth) {
+    // Fall back to the server-side Supabase URL so one project URL is enough
+    auth = parse(authSchema, "auth", {
+      ...process.env,
+      NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL,
+    });
+  }
+  return auth;
 }
