@@ -36,4 +36,6 @@ export interface OnChainMatchRow {
 /** Fixture plus its current on-chain match id (if any), as sent to the browser */
 export interface FixtureView extends FixtureRow {
   onchain_match_id: number | null;
+  /** Free picks per outcome (1 home, 2 draw, 3 away) */
+  pick_counts?: Record<1 | 2 | 3, number>;
 }

@@ -97,3 +97,36 @@ export async function fetchLeaderboard(sort: LeaderboardSort): Promise<Leaderboa
   );
   return data.users;
 }
+
+const MATCH_BETS = /* GraphQL */ `
+  query MatchBets($match: String!) {
+    bets(where: { match: $match }, orderBy: placedAt, orderDirection: desc, first: 200) {
+      bettor {
+        id
+      }
+      prediction
+      placedAt
+    }
+  }
+`;
+
+export interface MatchBet {
+  bettor: string;
+  prediction: 1 | 2 | 3;
+  placedAt: Date;
+}
+
+/** Who backed an on-chain match and which side (amounts deliberately not fetched); cached 30 s */
+export async function fetchMatchBets(matchId: number): Promise<MatchBet[]> {
+  const data = await query<{ bets: { bettor: { id: string }; prediction: "HOME" | "DRAW" | "AWAY"; placedAt: string }[] }>(
+    MATCH_BETS,
+    { match: String(matchId) },
+    { next: { revalidate: 30 } },
+  );
+  const side = { HOME: 1, DRAW: 2, AWAY: 3 } as const;
+  return data.bets.map((b) => ({
+    bettor: b.bettor.id,
+    prediction: side[b.prediction],
+    placedAt: new Date(Number(b.placedAt) * 1000),
+  }));
+}

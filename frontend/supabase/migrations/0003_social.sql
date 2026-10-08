@@ -67,6 +67,18 @@ create index picks_fixture_idx on public.picks (fixture_id);
 create index picks_unsettled_idx on public.picks (fixture_id) where settled_at is null;
 create index picks_user_settled_idx on public.picks (user_id, settled_at desc);
 
+-- Pick counts per fixture and outcome (social proof on lists and match pages)
+create or replace function public.fixture_pick_counts(fixture_ids bigint[])
+returns table (fixture_id bigint, prediction smallint, picks bigint)
+language sql stable
+set search_path = public
+as $$
+  select p.fixture_id, p.prediction, count(*)
+  from picks p
+  where p.fixture_id = any (fixture_ids)
+  group by 1, 2
+$$;
+
 -- ---------- Groups ----------
 create table public.groups (
   id uuid primary key default gen_random_uuid(),
@@ -84,6 +96,26 @@ create table public.group_members (
 );
 create index group_members_user_idx on public.group_members (user_id);
 
+-- Points table for settled free picks, optionally since a date and/or within a group
+create or replace function public.points_table(since timestamptz default null, member_of uuid default null, max_rows int default 100)
+returns table (user_id uuid, username text, display_name text, avatar_url text, points bigint, played bigint, won bigint)
+language sql stable
+set search_path = public
+as $$
+  select p.user_id, pr.username, pr.display_name, pr.avatar_url,
+         sum(p.points), count(*), count(*) filter (where p.result = 'won')
+  from picks p
+  join profiles pr on pr.id = p.user_id
+  where p.settled_at is not null
+    and p.result <> 'void'
+    and (since is null or p.settled_at >= since)
+    and (member_of is null or exists (
+      select 1 from group_members gm where gm.group_id = member_of and gm.user_id = p.user_id))
+  group by 1, 2, 3, 4
+  order by 5 desc, 7 desc, 6 asc, 2 asc
+  limit max_rows
+$$;
+
 -- ---------- Telegram channel posts already sent (dedupe) ----------
 create table public.channel_posts (
   key text primary key,
@@ -96,3 +128,7 @@ alter table public.picks enable row level security;
 alter table public.groups enable row level security;
 alter table public.group_members enable row level security;
 alter table public.channel_posts enable row level security;
+
+-- Functions are for the app server only
+revoke all on function public.fixture_pick_counts(bigint[]) from public, anon, authenticated;
+revoke all on function public.points_table(timestamptz, uuid, int) from public, anon, authenticated;

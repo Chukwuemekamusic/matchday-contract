@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { parseEther } from "viem";
 import { useAccount, useBalance, useReadContracts, useWriteContract } from "wagmi";
@@ -42,9 +43,11 @@ interface Props {
   away: string;
   /** Whether the fixture can still take a first bet (used before the match exists on-chain) */
   fixtureOpen: boolean;
+  /** The viewer's free pick, pre-selected in the bet slip */
+  preferredSide?: Side;
 }
 
-export function MatchPanel({ fixtureId, initialMatchId, home, away, fixtureOpen }: Props) {
+export function MatchPanel({ fixtureId, initialMatchId, home, away, fixtureOpen, preferredSide }: Props) {
   const [matchId, setMatchId] = useState<number | null>(initialMatchId);
   const id = BigInt(matchId ?? 0);
   const { address } = useAccount();
@@ -120,6 +123,7 @@ export function MatchPanel({ fixtureId, initialMatchId, home, away, fixtureOpen 
             pools={pools}
             home={home}
             away={away}
+            preferredSide={preferredSide}
           />
         ) : (
           <p className="text-sm text-muted">{PHASE_TEXT[phase]}</p>
@@ -136,6 +140,7 @@ function BetSlip({
   pools,
   home,
   away,
+  preferredSide,
 }: {
   fixtureId?: number;
   matchId: number | null;
@@ -143,14 +148,16 @@ function BetSlip({
   pools: typeof EMPTY_POOLS;
   home: string;
   away: string;
+  preferredSide?: Side;
 }) {
   const { address } = useAccount();
   const { data: balance } = useBalance({ address });
   const { feeBps, minStake, maxStake } = useProtocol();
   const { writeContractAsync } = useWriteContract();
   const { state, setState, run } = useTx();
+  const router = useRouter();
 
-  const [side, setSide] = useState<Side | null>(null);
+  const [side, setSide] = useState<Side | null>(preferredSide ?? null);
   const [amountText, setAmountText] = useState("");
 
   let amount: bigint | null = null;
@@ -209,7 +216,19 @@ function BetSlip({
     const ok = await run(() =>
       writeContractAsync({ ...matchDayBet, functionName: "placeBet", args: [BigInt(id!), side], value: amount! }),
     );
-    if (ok) setAmountText("");
+    if (ok) {
+      setAmountText("");
+      // Count an ETH bet as the free pick too (ignored when signed out or after kickoff)
+      if (fixtureId) {
+        fetch("/api/picks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fixtureId, prediction: side }),
+        })
+          .then((res) => res.ok && router.refresh())
+          .catch(() => {});
+      }
+    }
   }
 
   const presets = [minStake, 5n * 10n ** 15n, 10n ** 16n, maxStake].filter(

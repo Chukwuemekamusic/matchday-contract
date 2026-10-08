@@ -291,6 +291,13 @@ function FixtureRow({
   const pool = match?.totalPool ?? 0n;
   const bets = match ? Number(match.homeBetCount + match.drawBetCount + match.awayBetCount) : 0;
   const activity = pool > 0n ? `${bets} ${bets === 1 ? "bet" : "bets"} · ${formatEth(pool)} ETH` : null;
+  const picks = f.pick_counts ? f.pick_counts[1] + f.pick_counts[2] + f.pick_counts[3] : 0;
+  const picksText = picks ? `${picks} ${picks === 1 ? "pick" : "picks"}` : null;
+  const leader = f.pick_counts && picks ? ([1, 2, 3] as const).reduce((a, b) => (f.pick_counts![b] > f.pick_counts![a] ? b : a)) : null;
+  const leaderText =
+    leader && f.pick_counts
+      ? `${Math.round((f.pick_counts[leader] / picks) * 100)}% ${leader === 2 ? "draw" : leader === 1 ? (f.home_short ?? f.home_team) : (f.away_short ?? f.away_team)}`
+      : null;
 
   let status: ReactNode;
   if (state === "open") {
@@ -308,11 +315,19 @@ function FixtureRow({
             })}
           </div>
           <PoolBar pools={match} />
-          <div className="text-xs text-muted">{activity}</div>
+          <div className="text-xs text-muted">
+            {activity}
+            {picksText && ` · ${picksText}`}
+          </div>
+        </div>
+      ) : picksText ? (
+        <div className="text-xs">
+          <div className="font-medium text-foreground">{picksText}</div>
+          <div className="text-muted">{leaderText}</div>
         </div>
       ) : (
         <span className="inline-block rounded-full bg-accent-soft px-2.5 py-1 text-xs font-medium text-accent-strong">
-          Be the first to bet
+          Be the first to pick
         </span>
       );
   } else if (state === "postponed" || state === "cancelled") {
@@ -330,7 +345,9 @@ function FixtureRow({
     status = (
       <div className="text-xs">
         <div className="text-muted">{label}</div>
-        {activity && <div className="font-medium text-foreground">{activity}</div>}
+        {(activity || picksText) && (
+          <div className="font-medium text-foreground">{[activity, picksText].filter(Boolean).join(" · ")}</div>
+        )}
       </div>
     );
   }

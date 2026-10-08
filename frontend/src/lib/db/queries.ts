@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "./client";
+import { pickCounts } from "./social";
 import type { FixtureRow, FixtureView, OnChainMatchRow } from "./types";
 
 /** Latest non-failed on-chain match per fixture (live ones first, then settled history) */
@@ -40,7 +41,16 @@ export async function listFixtures(hoursBack = 9 * 24, daysAhead = 15): Promise<
   if (error) throw error;
 
   const rows = data as FixtureRow[];
-  return withMatchIds(rows, await matchIdsFor(rows.map((r) => r.id)));
+  const ids = rows.map((r) => r.id);
+  const [matchIds, counts] = await Promise.all([
+    matchIdsFor(ids),
+    // Social proof is optional: the list still works if the picks tables aren't migrated yet
+    pickCounts(ids).catch((err) => {
+      console.error("[fixtures] pick counts", err);
+      return new Map();
+    }),
+  ]);
+  return withMatchIds(rows, matchIds).map((f) => ({ ...f, pick_counts: counts.get(f.id) }));
 }
 
 export async function getFixture(id: number): Promise<FixtureView | null> {

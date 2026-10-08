@@ -28,6 +28,21 @@ export default function HowItWorks() {
     <article className="max-w-2xl space-y-8">
       <h1 className="text-2xl font-bold tracking-tight">How it works</h1>
 
+      <section className="space-y-2 rounded-xl border border-accent/40 bg-accent-soft/40 p-4 text-sm">
+        <h2 className="text-lg font-semibold">Free picks</h2>
+        <p className="text-muted">
+          Sign in with Telegram, Google or email and pick home, draw or away on any match — no wallet, no money. You can
+          change your pick until kickoff.
+        </p>
+        <ul className="list-disc space-y-1 pl-5 text-muted">
+          <li>3 points for a correct result (the score after 90 minutes).</li>
+          <li>+2 bonus points when fewer than a third of fans picked it (at least 3 picks on the match).</li>
+          <li>Postponed or cancelled matches are void — no points either way.</li>
+          <li>Climb the weekly table and compete with friends in groups.</li>
+        </ul>
+      </section>
+
+      <h2 className="text-lg font-semibold">Backing a pick with ETH (optional)</h2>
       <ol className="space-y-4">
         {steps.map((s, i) => (
           <li key={s.title} className="flex gap-4 rounded-xl border border-border bg-surface p-4">
